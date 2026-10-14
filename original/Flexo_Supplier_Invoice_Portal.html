@@ -1,0 +1,1118 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Flexo Supplier Invoice Portal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+:root{
+  --ground:#F3F6F5; --surface:#FFFFFF; --surface-2:#EAF0EE; --line:#D3DDDA; --line-2:#BFCBC7;
+  --ink:#15232B; --ink-2:#44545B; --ink-3:#6B7A80;
+  --accent:#0E6B5C; --accent-ink:#FFFFFF; --accent-soft:#DCEFEA;
+  --ok:#157A3F; --ok-soft:#DDF3E4; --warn:#9A6100; --warn-soft:#FCEFD4; --bad:#B42318; --bad-soft:#FBE3E0;
+  --info:#2A5DB0; --info-soft:#E2EBFA;
+  --shadow:0 1px 2px rgba(21,35,43,.06),0 6px 24px rgba(21,35,43,.06);
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --cond:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --ground:#0F1719; --surface:#162124; --surface-2:#1C2A2E; --line:#2A3A3F; --line-2:#3A4D52;
+    --ink:#E4ECEA; --ink-2:#B3C1BE; --ink-3:#83958F;
+    --accent:#3FB39C; --accent-ink:#06201B; --accent-soft:#163A34;
+    --ok:#5CCB86; --ok-soft:#173826; --warn:#E3AA4A; --warn-soft:#3A2C12; --bad:#F2877B; --bad-soft:#3F1D1A;
+    --info:#86AEF0; --info-soft:#1B2B47;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 24px rgba(0,0,0,.25);
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --ground:#0F1719; --surface:#162124; --surface-2:#1C2A2E; --line:#2A3A3F; --line-2:#3A4D52;
+  --ink:#E4ECEA; --ink-2:#B3C1BE; --ink-3:#83958F;
+  --accent:#3FB39C; --accent-ink:#06201B; --accent-soft:#163A34;
+  --ok:#5CCB86; --ok-soft:#173826; --warn:#E3AA4A; --warn-soft:#3A2C12; --bad:#F2877B; --bad-soft:#3F1D1A;
+  --info:#86AEF0; --info-soft:#1B2B47;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 24px rgba(0,0,0,.25);
+}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5}
+.wrap{max-width:1240px;margin:0 auto;padding-inline:20px;padding-block:0 48px}
+@media (max-width:520px){.wrap{padding-inline:16px}}
+h1,h2,h3{font-family:var(--cond);margin:0;text-wrap:balance;letter-spacing:.005em}
+.mono,.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.num{text-align:right;white-space:nowrap}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.eyebrow{font-family:var(--cond);font-weight:600;text-transform:uppercase;letter-spacing:.08em;font-size:11px;color:var(--ink-3)}
+.muted{color:var(--ink-3)}
+.small{font-size:12.5px}
+
+/* top bar */
+.topbar{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--surface);border-bottom:1px solid var(--line)}
+.topbar .wrap{display:flex;align-items:center;gap:16px;padding-block:10px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;margin-right:auto}
+.brand-mark{width:30px;height:30px;border-radius:7px;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-family:var(--cond);font-weight:700;font-size:15px}
+.brand h1{font-size:17px;font-weight:700;line-height:1.1}
+.brand .sub{font-size:11.5px;color:var(--ink-3)}
+.tabs{display:flex;gap:2px;background:var(--surface-2);padding:3px;border-radius:9px;flex-wrap:wrap}
+.tab{border:0;background:transparent;padding:6px 12px;border-radius:7px;font-weight:500;color:var(--ink-2);font-size:13px}
+.tab[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.who{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-2)}
+
+/* flow strip */
+.flow{display:flex;gap:0;align-items:stretch;margin:20px 0 18px;border:1px solid var(--line);border-radius:10px;background:var(--surface);overflow:hidden}
+.flow-step{flex:1;padding:10px 14px;display:flex;flex-direction:column;gap:2px;position:relative;min-width:0}
+.flow-step+.flow-step{border-left:1px solid var(--line)}
+.flow-step b{font-family:var(--cond);font-size:13.5px}
+.flow-step span{font-size:12px;color:var(--ink-3)}
+.flow-step .k{font-family:var(--mono);font-size:10.5px;color:var(--accent);letter-spacing:.04em}
+@media (max-width:720px){.flow{flex-direction:column}.flow-step+.flow-step{border-left:0;border-top:1px solid var(--line)}}
+
+/* generic */
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px}
+.panel-h{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.panel-h h2{font-size:16px;font-weight:600;margin-right:auto}
+.panel-b{padding:16px}
+.btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line-2);background:var(--surface);padding:7px 13px;border-radius:8px;font-weight:500;font-size:13px;white-space:nowrap}
+.btn:hover{border-color:var(--ink-3)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.primary:hover{filter:brightness(1.07)}
+.btn.danger{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 45%,var(--line))}
+.btn.ok{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 45%,var(--line))}
+.btn.ghost{border-color:transparent;background:transparent}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.sm{padding:4px 9px;font-size:12px}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.field label{font-size:12px;color:var(--ink-2);font-weight:500}
+.input,select.input,textarea.input{border:1px solid var(--line-2);background:var(--surface);border-radius:7px;padding:7px 9px;width:100%;min-width:0}
+.input:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
+.grid{display:grid;gap:12px}
+.g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.g4{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media (max-width:760px){.g3,.g4{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:460px){.g2,.g3,.g4{grid-template-columns:1fr}}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.stack{display:flex;flex-direction:column;gap:14px}
+.hr{height:1px;background:var(--line);margin:4px 0}
+.note{padding:10px 12px;border-radius:8px;background:var(--surface-2);font-size:12.5px;color:var(--ink-2)}
+.note.warn{background:var(--warn-soft);color:var(--warn)}
+.note.bad{background:var(--bad-soft);color:var(--bad)}
+.note.ok{background:var(--ok-soft);color:var(--ok)}
+
+/* pills */
+.pill{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:600;white-space:nowrap;font-family:var(--cond);letter-spacing:.02em}
+.pill::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.p-ready{background:var(--ok-soft);color:var(--ok)}
+.p-approved{background:var(--info-soft);color:var(--info)}
+.p-paid{background:var(--surface-2);color:var(--ink-2)}
+.p-exception{background:var(--warn-soft);color:var(--warn)}
+.p-review{background:var(--info-soft);color:var(--info)}
+.p-rejected{background:var(--bad-soft);color:var(--bad)}
+.chk{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:600;padding:1px 7px;border-radius:5px;font-family:var(--cond)}
+.chk.y{background:var(--ok-soft);color:var(--ok)}
+.chk.n{background:var(--bad-soft);color:var(--bad)}
+.chk.w{background:var(--warn-soft);color:var(--warn)}
+.tag{font-size:10.5px;font-family:var(--mono);padding:1px 6px;border-radius:4px;background:var(--surface-2);color:var(--ink-3);border:1px solid var(--line)}
+
+/* KPIs */
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}
+@media (max-width:820px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;text-align:left;display:flex;flex-direction:column;gap:2px;border-top:3px solid var(--line)}
+.kpi[data-k="ready"]{border-top-color:var(--ok)}
+.kpi[data-k="exception"]{border-top-color:var(--warn)}
+.kpi[data-k="review"]{border-top-color:var(--info)}
+.kpi[data-k="paid"]{border-top-color:var(--ink-3)}
+.kpi[aria-pressed="true"]{box-shadow:0 0 0 2px var(--accent-soft);border-color:var(--accent)}
+.kpi .n{font-family:var(--cond);font-size:26px;font-weight:700;line-height:1.1}
+.kpi .amt{font-family:var(--mono);font-size:12.5px;color:var(--ink-2)}
+
+/* tables */
+.tbl-wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%}
+th{font-family:var(--cond);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--surface)}
+td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+tr.click{cursor:pointer}
+tr.click:hover td{background:var(--surface-2)}
+tbody tr:last-child td{border-bottom:0}
+.empty{padding:28px 16px;text-align:center;color:var(--ink-3)}
+
+/* drop zone */
+.drop{border:1.5px dashed var(--line-2);border-radius:12px;padding:28px 16px;text-align:center;background:var(--surface-2);transition:border-color .15s,background .15s}
+.drop.over{border-color:var(--accent);background:var(--accent-soft)}
+.drop b{font-family:var(--cond);font-size:16px}
+.progress{height:6px;border-radius:999px;background:var(--surface-2);overflow:hidden}
+.progress>i{display:block;height:100%;background:var(--accent);width:0;transition:width .3s}
+.scan-state{display:flex;gap:10px;align-items:center;font-size:13px}
+.spinner{width:16px;height:16px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .8s linear infinite;flex:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spinner{animation-duration:2.4s}}
+
+/* detail drawer */
+.drawer-bg{position:fixed;inset:0;background:rgba(10,20,24,.42);z-index:40}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(1080px,100%);background:var(--ground);z-index:41;display:flex;flex-direction:column;box-shadow:-10px 0 40px rgba(0,0,0,.2)}
+.drawer-h{display:flex;align-items:center;gap:12px;padding:14px 20px;padding-top:calc(14px + env(safe-area-inset-top,0px));background:var(--surface);border-bottom:1px solid var(--line);flex-wrap:wrap}
+.drawer-h h2{font-size:18px;margin-right:auto}
+.drawer-b{overflow:auto;padding:18px 20px calc(28px + env(safe-area-inset-bottom,0px));display:grid;grid-template-columns:minmax(0,300px) minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:860px){.drawer-b{grid-template-columns:1fr}}
+.preview{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px;display:flex;flex-direction:column;gap:8px}
+.preview img{width:100%;border-radius:6px;border:1px solid var(--line);background:#fff}
+.preview .ph{aspect-ratio:3/4;display:grid;place-items:center;color:var(--ink-3);font-size:12.5px;text-align:center;padding:16px;border:1px dashed var(--line-2);border-radius:6px;max-width:100%}
+.verdict{border-radius:12px;padding:14px 16px;display:flex;gap:14px;align-items:flex-start;border:1px solid var(--line)}
+.verdict.ready{background:var(--ok-soft);border-color:color-mix(in srgb,var(--ok) 35%,transparent)}
+.verdict.exception{background:var(--warn-soft);border-color:color-mix(in srgb,var(--warn) 35%,transparent)}
+.verdict.review{background:var(--info-soft);border-color:color-mix(in srgb,var(--info) 35%,transparent)}
+.verdict .big{font-family:var(--cond);font-size:20px;font-weight:700;line-height:1.15}
+.verdict.ready .big{color:var(--ok)} .verdict.exception .big{color:var(--warn)} .verdict.review .big{color:var(--info)}
+.verdict ul{margin:6px 0 0;padding-left:18px;font-size:13px}
+.seal{flex:none;width:44px;height:44px;border-radius:50%;display:grid;place-items:center;font-family:var(--cond);font-weight:700;font-size:20px;border:2px solid currentColor}
+.verdict.ready .seal{color:var(--ok)} .verdict.exception .seal{color:var(--warn)} .verdict.review .seal{color:var(--info)}
+.kv{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px 16px}
+.kv div{display:flex;flex-direction:column;min-width:0}
+.kv dt{font-size:11.5px;color:var(--ink-3)}
+.kv dd{margin:0;font-weight:500;overflow-wrap:anywhere}
+.match-tbl td{font-size:13px}
+.match-tbl .grp{font-family:var(--cond);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);text-align:center;border-bottom:0;padding-bottom:0}
+.match-tbl .sep{border-left:1px solid var(--line)}
+.history{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;font-size:12.5px}
+.history li{display:flex;gap:10px}
+.history time{font-family:var(--mono);color:var(--ink-3);white-space:nowrap;font-size:11.5px}
+
+/* login */
+.login{max-width:440px;margin:48px auto}
+.login .panel-b{display:flex;flex-direction:column;gap:14px}
+.seg{display:grid;grid-template-columns:1fr 1fr;background:var(--surface-2);padding:3px;border-radius:9px}
+.seg button{border:0;background:transparent;padding:7px;border-radius:7px;font-weight:500;color:var(--ink-2)}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--ground);padding:9px 16px;border-radius:9px;font-size:13px;z-index:60;box-shadow:var(--shadow);max-width:calc(100% - 32px)}
+.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.filters .input{width:auto}
+.lines-edit td{padding:4px}
+.lines-edit .input{padding:5px 7px;font-size:13px}
+.inline-conf{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+</style>
+
+<div class="topbar">
+  <div class="wrap">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">F</div>
+      <div>
+        <h1>Supplier Invoice Portal</h1>
+        <div class="sub">Flexo Manufacturing Corporation · Accounts Payable</div>
+      </div>
+    </div>
+    <nav class="tabs" id="tabs" role="tablist" hidden></nav>
+    <div class="who" id="who"></div>
+  </div>
+</div>
+
+<main class="wrap" id="app">
+  <div class="empty" style="padding-top:80px"><div class="spinner" style="margin:0 auto 10px"></div>Loading portal…</div>
+</main>
+
+<div id="drawerRoot"></div>
+<div id="toastRoot"></div>
+
+<script>
+(() => {
+"use strict";
+// ---------- state ----------
+const S = {
+  db:null, assets:null, sample:null, downloads:null, imgLimits:null,
+  pos:[], grpos:[], invoices:[], vendors:[], settings:null, meta:null,
+  loaded:{pos:false,grpos:false,invoices:false,vendors:false,settings:false},
+  session:null, tab:null, filter:"ready", q:"", openId:null,
+  draft:null // supplier upload draft
+};
+const DEFAULT_SETTINGS = { priceTolPct:0.5, qtyTolPct:0, amountTol:1, staffPin:"2026", vatRate:12 };
+const $ = (s,el=document)=>el.querySelector(s);
+const esc = v => String(v ?? "").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const n = v => { if (v===null||v===undefined||v==="") return null; const x = typeof v==="number"?v:parseFloat(String(v).replace(/[^0-9.\-]/g,"")); return isFinite(x)?x:null; };
+const fmtAmt = (v,cur="PHP") => v==null?"—":(cur?cur+" ":"")+Number(v).toLocaleString("en-PH",{minimumFractionDigits:2,maximumFractionDigits:2});
+const fmtQty = v => v==null?"—":Number(v).toLocaleString("en-PH",{maximumFractionDigits:3});
+const fmtPct = v => v==null?"—":(v>0?"+":"")+v.toFixed(2)+"%";
+const fmtDate = s => { if(!s) return "—"; const d=new Date(s); return isNaN(d)?esc(s):d.toLocaleDateString("en-PH",{year:"numeric",month:"short",day:"numeric"}); };
+const fmtDT = s => { if(!s) return "—"; const d=new Date(s); return isNaN(d)?esc(s):d.toLocaleString("en-PH",{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}); };
+const normKey = s => String(s??"").toUpperCase().replace(/[^A-Z0-9]/g,"");
+const safeId = s => String(s??"").replace(/[^A-Za-z0-9_\-.~:@+]/g,"_").replace(/^\.+$/,"_").slice(0,150) || "x";
+const nowISO = () => new Date().toISOString();
+const settings = () => Object.assign({}, DEFAULT_SETTINGS, S.settings||{});
+function toast(msg){ const r=$("#toastRoot"); r.innerHTML=`<div class="toast" role="status">${esc(msg)}</div>`; clearTimeout(toast.t); toast.t=setTimeout(()=>r.innerHTML="",3200); }
+function ss(k,v){ try{ if(v===undefined) return JSON.parse(sessionStorage.getItem(k)||"null"); if(v===null) sessionStorage.removeItem(k); else sessionStorage.setItem(k,JSON.stringify(v)); }catch(e){ return null; } }
+
+const STATUS = {
+  ready:{label:"Ready for payment",cls:"p-ready",sup:"Received — being processed"},
+  approved:{label:"Approved (override)",cls:"p-approved",sup:"Received — being processed"},
+  exception:{label:"Exception",cls:"p-exception",sup:"Received — being processed"},
+  review:{label:"Needs review",cls:"p-review",sup:"Received — being processed"},
+  paid:{label:"Paid",cls:"p-paid",sup:"Paid"},
+  rejected:{label:"Returned",cls:"p-rejected",sup:"Returned to supplier"}
+};
+const pill = (st, supplierView) => { const x=STATUS[st]||STATUS.review; return `<span class="pill ${x.cls}">${esc(supplierView?x.sup:x.label)}</span>`; };
+
+// ---------- vendor helpers ----------
+function vendorList(){
+  const map = new Map();
+  for (const p of S.pos) if (p.vendorCode && !map.has(p.vendorCode)) map.set(p.vendorCode,{code:p.vendorCode,name:p.vendorName||p.vendorCode,accessCode:"",active:false});
+  for (const v of S.vendors) map.set(v.code, Object.assign({}, map.get(v.code)||{}, v));
+  return [...map.values()].sort((a,b)=>String(a.name).localeCompare(String(b.name)));
+}
+const vendorName = code => (vendorList().find(v=>v.code===code)||{}).name || code;
+
+// ---------- matching engine ----------
+function tokens(s){ return new Set(String(s||"").toUpperCase().replace(/[^A-Z0-9 ]/g," ").split(/\s+/).filter(t=>t.length>1)); }
+function sim(a,b){ const A=tokens(a),B=tokens(b); if(!A.size||!B.size) return 0; let i=0; for(const t of A) if(B.has(t)) i++; return i/(A.size+B.size-i); }
+function poByNo(no){ const k=normKey(no); return S.pos.find(p=>normKey(p.poNo)===k); }
+function receivedFor(poNo, poLine, itemCode){
+  const k=normKey(poNo); let qty=0; const docs=[];
+  for (const g of S.grpos){
+    if (normKey(g.poNo)!==k && !(g.lines||[]).some(l=>normKey(l.poNo)===k)) continue;
+    for (const l of (g.lines||[])){
+      const lp = l.poNo ? normKey(l.poNo) : normKey(g.poNo);
+      if (lp!==k) continue;
+      const hit = (l.poLine!=null && poLine!=null && String(l.poLine)===String(poLine)) || ((l.poLine==null||poLine==null) && itemCode && normKey(l.itemCode)===normKey(itemCode));
+      if (hit){ qty += n(l.qty)||0; if(!docs.includes(g.grpoNo)) docs.push(g.grpoNo); }
+    }
+  }
+  return {qty,docs};
+}
+function billedElsewhere(invId, poNo, poLine){
+  let q=0; const k=normKey(poNo);
+  for (const o of S.invoices){
+    if (o.id===invId) continue;
+    if (!["ready","approved","paid"].includes(o.status)) continue;
+    for (const ml of (o.match?.lines||[])) if (normKey(ml.poNo)===k && String(ml.poLine)===String(poLine)) q += n(ml.invQty)||0;
+  }
+  return q;
+}
+function runMatch(inv){
+  const cfg = settings(); const ex = inv.extracted||{}; const reasons=[]; const warns=[];
+  const cur = ex.currency || "PHP";
+  const lines = (ex.lines||[]).filter(l => l && (n(l.qty)!=null || n(l.unitPrice)!=null || l.description));
+  if (!ex.invoiceNo) reasons.push({t:"review",m:"Invoice number could not be read."});
+  if (!lines.length) reasons.push({t:"review",m:"No invoice line items were read."});
+  // duplicate
+  const dup = ex.invoiceNo && S.invoices.find(o=>o.id!==inv.id && o.vendorCode===inv.vendorCode && normKey(o.extracted?.invoiceNo)===normKey(ex.invoiceNo) && o.status!=="rejected");
+  if (dup) reasons.push({t:"exception",m:`Duplicate: invoice ${ex.invoiceNo} was already submitted (${fmtDate(dup.submittedAt)}).`});
+  const headerPOs = (ex.poNumbers||[]).map(String).filter(Boolean);
+  const vendorPOs = S.pos.filter(p=>p.vendorCode===inv.vendorCode);
+  const used = new Set();
+  const mlines = lines.map((l,idx)=>{
+    const qty = n(l.qty), price = n(l.unitPrice);
+    let cands = [];
+    const explicit = [l.poNo, ...headerPOs].filter(Boolean);
+    for (const no of explicit){ const p=poByNo(no); if(p && !cands.includes(p)) cands.push(p); }
+    if (!cands.length) cands = vendorPOs;
+    let best=null, bestScore=-1;
+    for (const p of cands) for (const pl of (p.lines||[])){
+      const key = p.poNo+"|"+pl.line;
+      let s=0;
+      if (l.itemCode && pl.itemCode && normKey(l.itemCode)===normKey(pl.itemCode)) s+=100;
+      s += sim(l.description, pl.desc)*60;
+      const pp=n(pl.price); if (price!=null && pp) { const d=Math.abs(price-pp)/pp*100; if(d<=cfg.priceTolPct) s+=25; else if(d<5) s+=8; }
+      if (used.has(key)) s-=30;
+      if (s>bestScore){ bestScore=s; best={p,pl}; }
+    }
+    const out = { idx, invDesc:l.description||"", invItem:l.itemCode||"", invQty:qty, invUom:l.uom||"", invPrice:price, invAmount:n(l.amount) };
+    if (!best || bestScore < 15){
+      out.found=false;
+      out.issue = explicit.length && !cands.some(Boolean) ? `PO ${explicit[0]} not found in SAP data` : "No matching PO line in SAP data";
+      return out;
+    }
+    used.add(best.p.poNo+"|"+best.pl.line);
+    out.found=true; out.poNo=best.p.poNo; out.poLine=best.pl.line; out.poItem=best.pl.itemCode; out.poDesc=best.pl.desc; out.poUom=best.pl.uom; out.poQty=n(best.pl.qty); out.poPrice=n(best.pl.price); out.poCur=best.p.currency||"PHP";
+    out.vendorOk = best.p.vendorCode===inv.vendorCode;
+    out.priceVarPct = (out.poPrice && price!=null) ? (price-out.poPrice)/out.poPrice*100 : null;
+    out.priceOk = out.priceVarPct!=null && Math.abs(out.priceVarPct) <= cfg.priceTolPct + 1e-9;
+    const rec = receivedFor(out.poNo,out.poLine,out.poItem);
+    out.received = rec.qty; out.grpoNos = rec.docs;
+    out.billedElsewhere = billedElsewhere(inv.id,out.poNo,out.poLine);
+    out.available = Math.max(0, out.received - out.billedElsewhere);
+    out.qtyVar = qty!=null ? qty - out.available : null;
+    out.qtyOk = qty!=null && out.received>0 && qty <= out.available*(1+cfg.qtyTolPct/100) + 1e-6;
+    if (out.amountCheck = (qty!=null&&price!=null&&out.invAmount!=null)) out.amountOk = Math.abs(qty*price - out.invAmount) <= Math.max(cfg.amountTol, 0.005*out.invAmount);
+    return out;
+  });
+  for (const m of mlines){
+    const lbl = `Line ${m.idx+1}${m.invDesc?` (${m.invDesc.slice(0,40)})`:""}`;
+    if (!m.found){ reasons.push({t:"exception",m:`${lbl}: ${m.issue}.`}); continue; }
+    if (!m.vendorOk) reasons.push({t:"exception",m:`${lbl}: PO ${m.poNo} belongs to another vendor.`});
+    if (!m.priceOk) reasons.push({t:"exception",m:`${lbl}: unit price ${fmtAmt(m.invPrice,"")} vs PO ${fmtAmt(m.poPrice,"")} (${fmtPct(m.priceVarPct)}, tolerance ±${cfg.priceTolPct}%).`});
+    if (!m.received) reasons.push({t:"exception",m:`${lbl}: no GRPO posted yet for PO ${m.poNo} line ${m.poLine}.`});
+    else if (!m.qtyOk) reasons.push({t:"exception",m:`${lbl}: billed qty ${fmtQty(m.invQty)} exceeds received-not-yet-billed ${fmtQty(m.available)} ${m.poUom||""}.`});
+    if (m.amountCheck && !m.amountOk) warns.push(`${lbl}: qty × price ≠ line amount.`);
+    if (m.invUom && m.poUom && normKey(m.invUom)!==normKey(m.poUom)) warns.push(`${lbl}: UoM on invoice (${m.invUom}) differs from PO (${m.poUom}).`);
+  }
+  // totals arithmetic (warning)
+  const sumLines = mlines.reduce((a,m)=>a+((m.invAmount!=null)?m.invAmount:((m.invQty||0)*(m.invPrice||0))),0);
+  const vat = n(ex.vatAmount), total = n(ex.totalAmount);
+  if (total!=null && lines.length){
+    const vatInc = sumLines + (vat||0);
+    if (Math.abs(vatInc-total) > Math.max(cfg.amountTol, 0.005*total) && Math.abs(sumLines-total) > Math.max(cfg.amountTol,0.005*total)) warns.push(`Invoice total ${fmtAmt(total,"")} does not foot to lines ${fmtAmt(sumLines,"")}${vat?` + VAT ${fmtAmt(vat,"")}`:""}.`);
+  }
+  if (ex.confidence==="low") warns.push("Scanner reported low reading confidence — check the image.");
+  const hasEx = reasons.some(r=>r.t==="exception"), hasRev = reasons.some(r=>r.t==="review");
+  const verdict = hasRev ? "review" : hasEx ? "exception" : "ready";
+  return { verdict, reasons:reasons.map(r=>r.m), warnings:warns, lines:mlines, checkedAt:nowISO(), sumLines, currency:cur };
+}
+function invTotal(inv){ const e=inv.extracted||{}; return n(e.totalAmount) ?? (inv.match?.sumLines||0); }
+
+// ---------- CSV ----------
+function parseCSV(text){
+  text = text.replace(/^﻿/,"");
+  const delim = (text.split("\n")[0].match(/\t/g)||[]).length > (text.split("\n")[0].match(/,/g)||[]).length ? "\t" : ",";
+  const rows=[]; let row=[], f="", q=false;
+  for (let i=0;i<text.length;i++){
+    const c=text[i];
+    if (q){ if(c==='"'){ if(text[i+1]==='"'){f+='"';i++;} else q=false; } else f+=c; }
+    else if (c==='"') q=true;
+    else if (c===delim){ row.push(f); f=""; }
+    else if (c==="\n"){ row.push(f); rows.push(row); row=[]; f=""; }
+    else if (c!=="\r") f+=c;
+  }
+  if (f!=="" || row.length){ row.push(f); rows.push(row); }
+  return rows.filter(r=>r.some(x=>String(x).trim()!==""));
+}
+const ALIASES = {
+  po:{ poNo:["docnum","pono","ponumber","po","purchaseorder","podocnum"], vendorCode:["cardcode","vendorcode","suppliercode","vendor"], vendorName:["cardname","vendorname","suppliername"], docDate:["docdate","podate","date"], currency:["doccur","currency","curr"], line:["linenum","line","polineno","poline","lineno"], itemCode:["itemcode","item","material","materialcode"], desc:["dscription","description","itemname","itemdescription","desc"], qty:["quantity","qty","orderedqty"], uom:["unitmsr","uom","unit","uommeasure"], price:["price","unitprice","priceafvat","poprice"] },
+  grpo:{ grpoNo:["docnum","grpono","grponumber","grpo","receiptno"], vendorCode:["cardcode","vendorcode","suppliercode"], vendorName:["cardname","vendorname"], docDate:["docdate","postingdate","date","grpodate"], poNo:["baseref","pono","ponumber","basepo","po"], poLine:["baseline","poline","polineno","baselinenum"], itemCode:["itemcode","item","material"], desc:["dscription","description","itemname"], qty:["quantity","qty","receivedqty"], uom:["unitmsr","uom","unit"] }
+};
+function mapHeaders(hdr, kind){
+  const norm = hdr.map(h=>String(h).toLowerCase().replace(/[^a-z0-9]/g,""));
+  const idx = {};
+  for (const [k,al] of Object.entries(ALIASES[kind])){ const i = norm.findIndex(h=>al.includes(h)); if (i>=0) idx[k]=i; }
+  return idx;
+}
+function buildPOs(rows){
+  const idx = mapHeaders(rows[0],"po"); const need=["poNo","vendorCode","qty","price"];
+  const miss = need.filter(k=>idx[k]==null); if (miss.length) throw new Error("Missing column(s): "+miss.join(", ")+". See the template.");
+  const m=new Map(); const g=(r,k)=>idx[k]==null?"":String(r[idx[k]]??"").trim();
+  rows.slice(1).forEach((r,i)=>{ const no=g(r,"poNo"); if(!no) return;
+    if(!m.has(no)) m.set(no,{poNo:no,vendorCode:g(r,"vendorCode"),vendorName:g(r,"vendorName"),docDate:g(r,"docDate"),currency:g(r,"currency")||"PHP",lines:[]});
+    const p=m.get(no); p.lines.push({line: g(r,"line")!==""?g(r,"line"):String(p.lines.length), itemCode:g(r,"itemCode"), desc:g(r,"desc"), qty:n(g(r,"qty")), uom:g(r,"uom"), price:n(g(r,"price"))});
+  });
+  return [...m.values()];
+}
+function buildGRPOs(rows){
+  const idx = mapHeaders(rows[0],"grpo"); const need=["grpoNo","poNo","qty"];
+  const miss = need.filter(k=>idx[k]==null); if (miss.length) throw new Error("Missing column(s): "+miss.join(", ")+". See the template.");
+  const m=new Map(); const g=(r,k)=>idx[k]==null?"":String(r[idx[k]]??"").trim();
+  rows.slice(1).forEach(r=>{ const no=g(r,"grpoNo"); if(!no) return;
+    if(!m.has(no)) m.set(no,{grpoNo:no,vendorCode:g(r,"vendorCode"),vendorName:g(r,"vendorName"),docDate:g(r,"docDate"),poNo:g(r,"poNo"),lines:[]});
+    m.get(no).lines.push({poNo:g(r,"poNo"), poLine: g(r,"poLine")!==""?g(r,"poLine"):null, itemCode:g(r,"itemCode"), desc:g(r,"desc"), qty:n(g(r,"qty")), uom:g(r,"uom")});
+  });
+  return [...m.values()];
+}
+const PO_TEMPLATE = "DocNum,CardCode,CardName,DocDate,DocCur,LineNum,ItemCode,Dscription,Quantity,unitMsr,Price\n4500123,V-00123,Sample Vendor Inc.,2026-09-01,PHP,0,RM-PE-001,LLDPE Film Grade Resin,5000,KG,86.50\n";
+const GRPO_TEMPLATE = "DocNum,CardCode,CardName,DocDate,BaseRef,BaseLine,ItemCode,Dscription,Quantity,unitMsr\n7700456,V-00123,Sample Vendor Inc.,2026-09-10,4500123,0,RM-PE-001,LLDPE Film Grade Resin,5000,KG\n";
+
+// ---------- PDF / image processing ----------
+async function fileToPageCanvases(file, maxPages=3){
+  const out=[];
+  if (file.type==="application/pdf" || /\.pdf$/i.test(file.name)){
+    if (!window.pdfjsLib) throw new Error("PDF reader did not load. Upload a JPG or PNG photo of the invoice instead.");
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({data:buf, isEvalSupported:false}).promise;
+    const count = Math.min(pdf.numPages, maxPages);
+    let text="";
+    for (let i=1;i<=count;i++){
+      const page = await pdf.getPage(i);
+      try{ const tc=await page.getTextContent(); let lastY=null; for(const it of tc.items){ const y=Math.round(it.transform?.[5]||0); if(lastY!==null && Math.abs(y-lastY)>3) text+="\n"; else if(lastY!==null) text+=" "; text+=it.str; lastY=y; } text+="\n\n"; }catch(e){}
+      const vp0 = page.getViewport({scale:1});
+      const scale = Math.min(2.2, 1700/vp0.width);
+      const vp = page.getViewport({scale});
+      const c = document.createElement("canvas"); c.width=Math.round(vp.width); c.height=Math.round(vp.height);
+      const ctx=c.getContext("2d"); ctx.fillStyle="#fff"; ctx.fillRect(0,0,c.width,c.height);
+      await page.render({canvasContext:ctx, viewport:vp}).promise;
+      out.push(c);
+    }
+    return {canvases:out, pages:pdf.numPages, text};
+  }
+  if (!/^image\/(jpeg|png|webp|gif)$/.test(file.type)) throw new Error("Unsupported file. Upload a PDF, JPG or PNG.");
+  const url = URL.createObjectURL(file);
+  try{
+    const img = await new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=()=>rej(new Error("Could not open the image.")); im.src=url; });
+    const scale = Math.min(1, 2000/Math.max(img.naturalWidth,img.naturalHeight));
+    const c=document.createElement("canvas"); c.width=Math.round(img.naturalWidth*scale); c.height=Math.round(img.naturalHeight*scale);
+    const ctx=c.getContext("2d"); ctx.fillStyle="#fff"; ctx.fillRect(0,0,c.width,c.height); ctx.drawImage(img,0,0,c.width,c.height);
+    out.push(c);
+  } finally { URL.revokeObjectURL(url); }
+  return {canvases:out,pages:1};
+}
+const canvasBlob = (c,q=.88) => new Promise(r=>c.toBlob(r,"image/jpeg",q));
+function compressedDataURL(c, maxBytes=180000){
+  let w=Math.min(1100,c.width), q=.72, url="";
+  for (let tries=0; tries<8; tries++){
+    const t=document.createElement("canvas"); t.width=w; t.height=Math.round(c.height*w/c.width);
+    t.getContext("2d").drawImage(c,0,0,t.width,t.height);
+    url = t.toDataURL("image/jpeg",q);
+    if (url.length*0.75 < maxBytes) return url;
+    if (q>.5) q-=.1; else w=Math.round(w*.8);
+  }
+  return url.length*0.75 < 250000 ? url : null;
+}
+
+// ---------- scanning ----------
+function buildPrompt(vendorCode){
+  const pos = S.pos.filter(p=>p.vendorCode===vendorCode).slice(0,40);
+  const ctx = pos.map(p=>`PO ${p.poNo}: `+(p.lines||[]).slice(0,8).map(l=>`${l.itemCode||""} ${l.desc||""}`.trim()).join("; ")).join("\n");
+  return `You are reading a supplier's billing document (Philippine BIR-registered Sales Invoice, Service Invoice, Billing Statement, or similar) submitted to Flexo Manufacturing Corporation for payment. The attached images are the page(s) of ONE document.
+
+Extract exactly what is printed. Do not guess or compute values that are not printed, except: if a line amount is missing but qty and unit price are printed, leave amount null.
+Numbers: plain numbers without commas or currency symbols. Dates: YYYY-MM-DD. Unit price is price per unit of measure, VAT-exclusive if the document shows both (note this in "notes").
+PO numbers may appear as "PO No.", "P.O. #", "Your Order No.", "Ref PO". Delivery receipt numbers appear as "DR No.".
+
+Known open Flexo PO numbers for this supplier (helps you recognise PO references; do not invent matches):
+${ctx || "(none on file)"}
+
+Reply with only this JSON object:
+{"isInvoice":true,"documentType":"Sales Invoice","supplierName":"","supplierTIN":"","invoiceNo":"","invoiceDate":"YYYY-MM-DD","poNumbers":[""],"drNumbers":[""],"currency":"PHP","lines":[{"poNo":null,"itemCode":null,"description":"","qty":0,"uom":"","unitPrice":0,"amount":0}],"subtotal":null,"vatAmount":null,"totalAmount":null,"confidence":"high","notes":""}
+confidence = "high" | "medium" | "low" for how legible and complete the reading is. If the images are not a billing document, set isInvoice false.`;
+}
+async function scanDocument(d, vendorCode, signal){
+  const useImages = !!S.imgLimits && d.canvases?.length;
+  if (useImages){
+    const blobs=[]; const max = S.imgLimits.maxCount || 1;
+    for (const c of d.canvases.slice(0,max)) blobs.push(await canvasBlob(c));
+    try{ return {raw: await S.sample.json(buildPrompt(vendorCode), {images:blobs, modelTier:"default", signal, cache:false}), via:"image"}; }
+    catch(e){ if (e?.code!=="images_unavailable" || !d.pdfText) throw e; S.imgLimits=null; }
+  }
+  if (d.pdfText && d.pdfText.replace(/\s/g,"").length > 40){
+    const prompt = buildPrompt(vendorCode).replace("The attached images are the page(s) of ONE document.","Below is the text layer extracted from the PDF of ONE document (layout may be jumbled; rebuild the table rows by reading order).") + "\n\n--- DOCUMENT TEXT ---\n" + d.pdfText.slice(0,40000);
+    return {raw: await S.sample.json(prompt, {modelTier:"default", signal, cache:false}), via:"text"};
+  }
+  const err = new Error("no_readable_input"); err.code = d.pdfText!=null ? "no_text_layer" : "images_unavailable"; throw err;
+}
+function normDate(v){
+  v=String(v||"").trim(); if(!v) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+  let m=v.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})$/);
+  if (m){ let [_,a,b,y]=m; if(y.length===2) y="20"+y; const mm=+a>12?b:a, dd=+a>12?a:b; return `${y}-${String(mm).padStart(2,"0")}-${String(dd).padStart(2,"0")}`; }
+  const d=new Date(v); if(!isNaN(d)) return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  return "";
+}
+function cleanExtract(x){
+  x = x && typeof x==="object" ? x : {};
+  const arr = v => Array.isArray(v)?v.filter(Boolean).map(String):(v?[String(v)]:[]);
+  return {
+    isInvoice: x.isInvoice!==false, documentType: String(x.documentType||""),
+    supplierName:String(x.supplierName||""), supplierTIN:String(x.supplierTIN||""),
+    invoiceNo:String(x.invoiceNo||"").trim(), invoiceDate:normDate(x.invoiceDate),
+    poNumbers:arr(x.poNumbers).filter(s=>s.trim()), drNumbers:arr(x.drNumbers).filter(s=>s.trim()),
+    currency:String(x.currency||"PHP").toUpperCase().slice(0,3),
+    lines:(Array.isArray(x.lines)?x.lines:[]).slice(0,60).map(l=>({poNo:l?.poNo?String(l.poNo):"",itemCode:l?.itemCode?String(l.itemCode):"",description:String(l?.description||""),qty:n(l?.qty),uom:String(l?.uom||""),unitPrice:n(l?.unitPrice),amount:n(l?.amount)})),
+    subtotal:n(x.subtotal), vatAmount:n(x.vatAmount), totalAmount:n(x.totalAmount),
+    confidence:["high","medium","low"].includes(x.confidence)?x.confidence:"medium", notes:String(x.notes||"").slice(0,500)
+  };
+}
+const SAMPLE_ERR = {
+  not_granted:"Invoice scanning was not allowed in this browser. You can type the invoice details below instead.",
+  sampling_disabled:"Invoice scanning isn't available for this account. Type the invoice details below instead.",
+  images_unavailable:"This view can't read photos or scanned images. Upload the invoice as a text PDF, or type the details below.",
+  no_text_layer:"This PDF is a scanned image with no text, and this view can't read images. Type the details, or ask the supplier for a text PDF.",
+  rate_limited:"Too many scans in a short time. Wait a minute, then press Scan again.",
+  image_rejected:"The file couldn't be read. Try a clearer scan or a JPG/PNG photo.",
+  invalid_json:"The scan result was incomplete. Press Scan again.",
+  refused:"The document couldn't be scanned. Type the invoice details below instead.",
+  session_expired:"Your sign-in expired. Reload the page and sign in again."
+};
+
+// ---------- data layer ----------
+async function boot(){
+  try{ if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"; }catch(e){}
+  try { S.db = await claude.use("db"); } catch(e){ S.db=null; }
+  if (!S.db){ $("#app").innerHTML = `<div class="login panel"><div class="panel-b"><h2>Portal unavailable here</h2><p class="muted">This portal needs its shared database, which this view can't reach. Open it from claude.ai while signed in to your Flexo account.</p></div></div>`; return; }
+  claude.use("assets").then(a=>S.assets=a).catch(()=>{});
+  claude.use("downloads").then(d=>S.downloads=d).catch(()=>{});
+  S.sampleReady = claude.use("sample").then(async s=>{ S.sample=s; if(s){ try{ S.imgLimits=(await s.limits()).images||null; }catch(e){ S.imgLimits=null; } } S.sampleChecked=true; render(); }).catch(()=>{ S.sampleChecked=true; render(); });
+  const sub = (col, key, map) => S.db.collection(col).limit(1000).onSnapshot(snap=>{ S[key]=snap.docs.map(d=>map(d)); S.loaded[key]=true; render(); }, err=>{ S.loaded[key]=true; toast("Data connection issue: "+(err?.code||"unknown")); render(); });
+  sub("sap_po","pos",d=>Object.assign({id:d.id},d.data()));
+  sub("sap_grpo","grpos",d=>Object.assign({id:d.id},d.data()));
+  sub("invoices","invoices",d=>Object.assign({id:d.id},d.data()));
+  sub("vendors","vendors",d=>Object.assign({id:d.id},d.data()));
+  S.db.doc("settings/app").onSnapshot(d=>{ S.settings=d.exists?d.data():null; S.loaded.settings=true; render(); }, ()=>{ S.loaded.settings=true; render(); });
+  S.db.doc("settings/sap_import").onSnapshot(d=>{ S.meta=d.exists?d.data():null; render(); }, ()=>{});
+  S.session = ss("fx_session");
+  render();
+}
+const allLoaded = () => Object.values(S.loaded).every(Boolean);
+
+async function saveInvoice(id, body){ await S.db.doc("invoices/"+id).set(body); }
+async function patchInvoice(inv, patch, event){
+  const hist = (inv.history||[]).slice(-40); if (event) hist.push({at:nowISO(), by:S.session?.label||"—", e:event});
+  await S.db.doc("invoices/"+inv.id).update(Object.assign({}, patch, {history:hist, updatedAt:nowISO()}));
+}
+
+// ---------- rendering ----------
+function render(){
+  const app=$("#app");
+  if (!S.db) return;
+  if (!allLoaded()){ return; }
+  renderWho();
+  if (!S.session){ renderTabs([]); app.innerHTML = loginView(); bindLogin(); return; }
+  const tabs = S.session.role==="supplier" ? [["upload","Submit invoice"],["mine","My submissions"]] : [["queue","Payment queue"],["sap","SAP data"],["suppliers","Supplier access"],["settings","Rules"]];
+  if (!S.tab || !tabs.some(t=>t[0]===S.tab)) S.tab = tabs[0][0];
+  renderTabs(tabs);
+  const active = document.activeElement; const keepId = active && active.id; const selStart = active && active.selectionStart;
+  if (S.tab==="upload") app.innerHTML = supplierStrip()+uploadView();
+  else if (S.tab==="mine") app.innerHTML = mineView();
+  else if (S.tab==="queue") app.innerHTML = flowStrip()+queueView();
+  else if (S.tab==="sap") app.innerHTML = sapView();
+  else if (S.tab==="suppliers") app.innerHTML = suppliersView();
+  else if (S.tab==="settings") app.innerHTML = settingsView();
+  bindView();
+  if (keepId){ const el=document.getElementById(keepId); if (el && el!==document.activeElement){ el.focus(); try{ if(selStart!=null) el.setSelectionRange(selStart,selStart); }catch(e){} } }
+  renderDrawer();
+}
+function renderWho(){
+  const w=$("#who");
+  if (!S.session){ w.innerHTML=""; return; }
+  w.innerHTML = `<span>${S.session.role==="supplier"?"Supplier":"Flexo staff"} · <b>${esc(S.session.label)}</b></span><button class="btn sm ghost" id="logout">Sign out</button>`;
+  $("#logout").onclick=()=>{ S.session=null; ss("fx_session",null); S.draft=null; S.openId=null; render(); };
+}
+function renderTabs(tabs){
+  const t=$("#tabs"); t.hidden=!tabs.length;
+  t.innerHTML = tabs.map(([k,l])=>`<button class="tab" role="tab" aria-selected="${S.tab===k}" data-tab="${k}">${esc(l)}</button>`).join("");
+  t.querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>{ S.tab=b.dataset.tab; S.openId=null; render(); });
+}
+function supplierStrip(){
+  return `<div class="flow" aria-label="How to submit">
+    <div class="flow-step"><span class="k">STEP 1</span><b>Upload invoice</b><span>PDF or photo — details are filled in automatically</span></div>
+    <div class="flow-step"><span class="k">STEP 2</span><b>Check the details</b><span>Correct anything misread so it matches your invoice</span></div>
+    <div class="flow-step"><span class="k">STEP 3</span><b>Submit to Flexo</b><span>Track processing and payment under My submissions</span></div>
+  </div>`;
+}
+function flowStrip(){
+  return `<div class="flow" aria-label="Verification workflow">
+    <div class="flow-step"><span class="k">STEP 1 · SUPPLIER</span><b>Upload invoice</b><span>PDF or photo, scanned for invoice no., PO, qty and price</span></div>
+    <div class="flow-step"><span class="k">STEP 2 · SAP LOOKUP</span><b>PO price · GRPO quantity</b><span>Each line checked against imported SAP purchase orders and goods receipts</span></div>
+    <div class="flow-step"><span class="k">STEP 3 · VERDICT</span><b>Clear for payment</b><span>Full match goes straight to the ready-for-payment queue; anything else is flagged</span></div>
+  </div>`;
+}
+
+// ---- login
+let loginMode = "supplier";
+function loginView(){
+  const vendors = vendorList().filter(v=>v.active && v.accessCode);
+  return `<div class="login panel">
+    <div class="panel-h"><h2>Sign in</h2></div>
+    <div class="panel-b">
+      <div class="seg" role="group" aria-label="Sign in as">
+        <button id="lm-sup" aria-pressed="${loginMode==="supplier"}">Supplier</button>
+        <button id="lm-staff" aria-pressed="${loginMode==="staff"}">Flexo staff</button>
+      </div>
+      ${loginMode==="supplier" ? `
+        <div class="field"><label for="lg-vendor">Supplier</label>
+          <select class="input" id="lg-vendor">${vendors.length?vendors.map(v=>`<option value="${esc(v.code)}">${esc(v.name)} · ${esc(v.code)}</option>`).join(""):`<option value="">No suppliers enabled yet</option>`}</select></div>
+        <div class="field"><label for="lg-code">Access code</label><input class="input mono" id="lg-code" type="password" autocomplete="off" placeholder="Issued by Flexo Accounting"></div>
+        <button class="btn primary" id="lg-go">Continue</button>
+        <p class="small muted">Your access code is issued by Flexo Accounting. Submitted invoices are processed by Flexo Accounting; you can track their status here.</p>
+      ` : `
+        <div class="field"><label for="lg-name">Your name</label><input class="input" id="lg-name" placeholder="e.g. AP Clerk" autocomplete="name"></div>
+        <div class="field"><label for="lg-pin">Staff PIN</label><input class="input mono" id="lg-pin" type="password" inputmode="numeric" autocomplete="off"></div>
+        <button class="btn primary" id="lg-go">Continue</button>
+        <p class="small muted">For Accounting and IT. Default PIN on first setup is 2026 — change it under Rules.</p>
+      `}
+      <p class="small" id="lg-err" style="color:var(--bad)" hidden></p>
+    </div></div>`;
+}
+function bindLogin(){
+  $("#lm-sup").onclick=()=>{loginMode="supplier";render();};
+  $("#lm-staff").onclick=()=>{loginMode="staff";render();};
+  const err = m => { const e=$("#lg-err"); e.textContent=m; e.hidden=false; };
+  const go = () => {
+    if (loginMode==="supplier"){
+      const code=$("#lg-vendor").value; const v=vendorList().find(x=>x.code===code);
+      if (!v) return err("Choose your supplier name.");
+      if (String($("#lg-code").value).trim()!==String(v.accessCode)) return err("Access code doesn't match. Check with Flexo Accounting.");
+      S.session={role:"supplier",vendorCode:v.code,label:v.name};
+    } else {
+      if (String($("#lg-pin").value).trim()!==String(settings().staffPin)) return err("Incorrect PIN.");
+      const nm=$("#lg-name").value.trim(); if(!nm) return err("Enter your name so actions are logged under it.");
+      S.session={role:"staff",label:nm};
+    }
+    ss("fx_session",S.session); S.tab=null; render();
+  };
+  $("#lg-go").onclick=go;
+  document.querySelectorAll("#app input").forEach(i=>i.addEventListener("keydown",e=>{ if(e.key==="Enter") go(); }));
+}
+
+// ---- supplier upload
+function scannerStatus(){
+  if (!S.sampleChecked) return `<div class="note">Auto-fill scanner: connecting…</div>`;
+  if (!S.sample) return `<div class="note warn">Auto-fill scanner isn't available in this view, so invoice details must be typed. Open the portal on claude.ai (web or desktop app) while signed in to use auto-fill.</div>`;
+  if (!S.imgLimits) return `<div class="note warn">Auto-fill works for PDF invoices with selectable text in this view. Photos and scanned images can't be read here — type their details, or upload the supplier's PDF.</div>`;
+  return `<div class="note ok">Auto-fill scanner ready — invoice details are filled in from the uploaded PDF or photo. The first time, Claude asks you to allow it; choose Allow.</div>`;
+}
+function uploadView(){
+  const d = S.draft;
+  const canScan = !!(S.sample && S.imgLimits);
+  let body = "";
+  if (!d || d.stage==="idle"){
+    body = `<div class="drop" id="drop">
+        <b>Drop your invoice here</b>
+        <p class="muted small" style="margin:6px 0 12px">PDF, JPG or PNG · one invoice per upload · first ${S.imgLimits?.maxCount||3} pages are read</p>
+        <label class="btn primary" for="file-in">Choose file</label>
+        <input id="file-in" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" hidden>
+      </div>
+      <div style="margin-top:12px">${scannerStatus()}</div>`;
+  } else if (d.stage==="reading" || d.stage==="scanning"){
+    body = `<div class="panel-b stack" style="padding:0">
+      <div class="scan-state"><div class="spinner"></div><div><b>${d.stage==="reading"?"Preparing pages…":"Scanning invoice…"}</b><div class="small muted">${esc(d.fileName)} · ${d.stage==="scanning"?"reading invoice no., PO reference, quantities and unit prices (usually 10–40 s)":""}</div></div></div>
+      <div class="progress"><i style="width:${d.stage==="reading"?25:70}%"></i></div>
+      ${d.stage==="scanning"?`<div><button class="btn sm" id="scan-stop">Stop and type details instead</button></div>`:""}
+    </div>`;
+  } else if (d.stage==="review"){
+    body = reviewForm(d);
+  } else if (d.stage==="done"){
+    const inv = S.invoices.find(i=>i.id===d.invId);
+    body = `<div class="stack">
+      ${inv?supplierVerdict(inv):`<div class="note">Submitted.</div>`}
+      <div class="row"><button class="btn primary" id="new-upload">Submit another invoice</button><button class="btn" id="goto-mine">View my submissions</button></div>
+    </div>`;
+  }
+  return `<div class="grid" style="grid-template-columns:minmax(0,1fr)">
+    <section class="panel"><div class="panel-h"><h2>Submit an invoice to Flexo</h2><span class="small muted">${esc(S.session.label)} · ${esc(S.session.vendorCode)}</span></div>
+    <div class="panel-b">${body}</div></section></div>`;
+}
+function reviewForm(d){
+  const e = d.extracted;
+  const lineRows = e.lines.map((l,i)=>`<tr>
+    <td><input class="input mono" id="ln-po-${i}" data-l="${i}" data-f="poNo" value="${esc(l.poNo)}" placeholder="PO" style="width:100px"></td>
+    <td><input class="input" id="ln-desc-${i}" data-l="${i}" data-f="description" value="${esc(l.description)}" style="min-width:180px"></td>
+    <td><input class="input num" id="ln-qty-${i}" data-l="${i}" data-f="qty" value="${l.qty??""}" style="width:90px"></td>
+    <td><input class="input" id="ln-uom-${i}" data-l="${i}" data-f="uom" value="${esc(l.uom)}" style="width:64px"></td>
+    <td><input class="input num" id="ln-price-${i}" data-l="${i}" data-f="unitPrice" value="${l.unitPrice??""}" style="width:110px"></td>
+    <td><input class="input num" id="ln-amt-${i}" data-l="${i}" data-f="amount" value="${l.amount??""}" style="width:120px"></td>
+    <td><button class="btn sm ghost" data-del="${i}" aria-label="Remove line ${i+1}">✕</button></td></tr>`).join("");
+  return `<div class="stack">
+    ${d.error?`<div class="note warn">${esc(d.error)}</div>`:""}
+    ${d.scanned&&!d.error?`<div class="note ok">Auto-filled from ${esc(d.fileName)}${d.scanVia==="text"?" (PDF text)":""}. Check the details against your invoice, correct anything misread, then submit. Corrections are shown to Flexo Accounting.</div>`:(d.error?"":`<div class="note">File attached: <b>${esc(d.fileName)}</b>. Enter the invoice details exactly as printed.</div>`)}
+    ${e.isInvoice===false?`<div class="note bad">This file doesn't look like an invoice. Check that you uploaded the right document.</div>`:""}
+    <div class="grid" style="grid-template-columns:minmax(0,220px) minmax(0,1fr);gap:16px" id="rv-grid">
+      <div class="preview">${d.previews?.[0]?`<img src="${d.previews[0]}" alt="Invoice page 1">`:`<div class="ph">No preview</div>`}</div>
+      <div class="stack">
+        <div class="grid g4">
+          <div class="field"><label for="rv-invno">Invoice no.</label><input class="input mono" id="rv-invno" data-h="invoiceNo" value="${esc(e.invoiceNo)}"></div>
+          <div class="field"><label for="rv-date">Invoice date</label><input class="input" type="date" id="rv-date" data-h="invoiceDate" value="${esc(e.invoiceDate)}"></div>
+          <div class="field"><label for="rv-po">PO no(s).</label><input class="input mono" id="rv-po" data-h="poNumbers" value="${esc(e.poNumbers.join(", "))}"></div>
+          <div class="field"><label for="rv-dr">DR no(s).</label><input class="input mono" id="rv-dr" data-h="drNumbers" value="${esc(e.drNumbers.join(", "))}"></div>
+          <div class="field"><label for="rv-tin">Supplier TIN</label><input class="input mono" id="rv-tin" data-h="supplierTIN" value="${esc(e.supplierTIN)}"></div>
+          <div class="field"><label for="rv-cur">Currency</label><input class="input mono" id="rv-cur" data-h="currency" value="${esc(e.currency)}"></div>
+          <div class="field"><label for="rv-vat">VAT amount</label><input class="input num" id="rv-vat" data-h="vatAmount" value="${e.vatAmount??""}"></div>
+          <div class="field"><label for="rv-total">Total amount due</label><input class="input num" id="rv-total" data-h="totalAmount" value="${e.totalAmount??""}"></div>
+        </div>
+      </div>
+    </div>
+    <div class="tbl-wrap"><table class="lines-edit"><thead><tr><th>PO</th><th>Description</th><th class="num">Qty</th><th>UoM</th><th class="num">Unit price</th><th class="num">Amount</th><th></th></tr></thead><tbody>${lineRows||`<tr><td colspan="7" class="empty">No lines yet — add each invoice line.</td></tr>`}</tbody></table></div>
+    <div class="row"><button class="btn sm" id="add-line">+ Add line</button>${canRescan(d)?`<button class="btn sm" id="rescan">${d.scanned?"Scan again":"Auto-fill from invoice"}</button>`:""}<span style="flex:1"></span><button class="btn" id="cancel-draft">Cancel</button><button class="btn primary" id="submit-inv">Submit to Flexo</button></div>
+  </div>`;
+}
+const canRescan = d => !!(S.sample && (S.imgLimits || (d.pdfText||"").replace(/\s/g,"").length>40));
+function supplierVerdict(inv){
+  const st = inv.status; const x=STATUS[st]||STATUS.review;
+  const paid = st==="paid", ret = st==="rejected";
+  return `<div class="verdict ${paid?"ready":ret?"exception":"review"}">
+    <div class="seal">${paid?"✓":ret?"!":"✓"}</div>
+    <div><div class="big">${esc(paid||ret?x.sup:"Invoice received")}</div>
+    <div class="small">Invoice <b class="mono">${esc(inv.extracted?.invoiceNo||"—")}</b> · ${fmtAmt(invTotal(inv),inv.extracted?.currency)} · submitted ${fmtDT(inv.submittedAt)}</div>
+    ${ret?`<div class="small" style="margin-top:4px">Reason: ${esc(inv.rejectReason||"—")}</div>`:paid?"":`<div class="small" style="margin-top:4px">Flexo Accounting will process it for payment. Track its status under My submissions. No action needed unless we contact you.</div>`}
+    </div></div>`;
+}
+function mineView(){
+  const mine = S.invoices.filter(i=>i.vendorCode===S.session.vendorCode).sort((a,b)=>String(b.submittedAt).localeCompare(String(a.submittedAt)));
+  return `<section class="panel" style="margin-top:20px"><div class="panel-h"><h2>My submissions</h2><span class="small muted">${mine.length} invoice${mine.length===1?"":"s"}</span></div>
+  <div class="tbl-wrap"><table><thead><tr><th>Submitted</th><th>Invoice no.</th><th>Invoice date</th><th>PO</th><th class="num">Amount</th><th>Status</th></tr></thead><tbody>
+  ${mine.map(i=>`<tr><td class="mono small">${fmtDT(i.submittedAt)}</td><td class="mono">${esc(i.extracted?.invoiceNo)}</td><td>${fmtDate(i.extracted?.invoiceDate)}</td><td class="mono small">${esc((i.extracted?.poNumbers||[]).join(", "))}</td><td class="num">${fmtAmt(invTotal(i),i.extracted?.currency)}</td><td>${pill(i.status,true)}${i.status==="paid"&&i.payment?.ref?` <span class="small muted">Ref ${esc(i.payment.ref)}</span>`:""}${i.status==="rejected"?`<div class="small muted">${esc(i.rejectReason||"")}</div>`:""}</td></tr>`).join("") || `<tr><td colspan="6" class="empty">No invoices submitted yet.</td></tr>`}
+  </tbody></table></div></section>`;
+}
+
+// ---- staff queue
+function queueView(){
+  const inv = S.invoices;
+  const agg = k => { const xs=inv.filter(i=>k==="ready"?["ready","approved"].includes(i.status):i.status===k); return {c:xs.length, a:xs.reduce((s,i)=>s+(invTotal(i)||0),0)}; };
+  const k = {ready:agg("ready"),exception:agg("exception"),review:agg("review"),paid:agg("paid")};
+  const labels = {ready:"Ready for payment",exception:"Exceptions",review:"Needs review",paid:"Paid"};
+  let rows = inv.filter(i => S.filter==="all" ? true : S.filter==="ready" ? ["ready","approved"].includes(i.status) : i.status===S.filter);
+  if (S.q){ const q=S.q.toLowerCase(); rows=rows.filter(i=>[i.vendorName,i.vendorCode,i.extracted?.invoiceNo,(i.extracted?.poNumbers||[]).join(" "),...(i.match?.lines||[]).map(l=>l.poNo)].join(" ").toLowerCase().includes(q)); }
+  rows.sort((a,b)=>String(b.submittedAt).localeCompare(String(a.submittedAt)));
+  const noSap = !S.pos.length || !S.grpos.length;
+  return `
+  ${noSap?`<div class="note warn" style="margin-bottom:14px">SAP data is incomplete (${S.pos.length} POs, ${S.grpos.length} GRPOs loaded). Import under <b>SAP data</b> so invoices can be matched.</div>`:""}
+  <div class="kpis">${Object.keys(k).map(key=>`<button class="kpi" data-k="${key}" aria-pressed="${S.filter===key}"><span class="eyebrow">${labels[key]}</span><span class="n">${k[key].c}</span><span class="amt">${fmtAmt(k[key].a)}</span></button>`).join("")}</div>
+  <section class="panel">
+    <div class="panel-h"><h2>${S.filter==="all"?"All invoices":labels[S.filter]||"Returned to supplier"}</h2>
+      <div class="filters">
+        <input class="input" id="q" type="search" placeholder="Search vendor, invoice, PO" value="${esc(S.q)}">
+        <select class="input" id="flt"><option value="ready"${S.filter==="ready"?" selected":""}>Ready for payment</option><option value="exception"${S.filter==="exception"?" selected":""}>Exceptions</option><option value="review"${S.filter==="review"?" selected":""}>Needs review</option><option value="paid"${S.filter==="paid"?" selected":""}>Paid</option><option value="rejected"${S.filter==="rejected"?" selected":""}>Returned</option><option value="all"${S.filter==="all"?" selected":""}>All</option></select>
+        <button class="btn sm" id="recheck">Re-check open exceptions</button>
+        ${S.filter==="ready"?`<button class="btn sm primary" id="export-ready" ${rows.length?"":"disabled"}>Export for payment (CSV)</button>`:""}
+      </div>
+    </div>
+    <div class="tbl-wrap"><table><thead><tr><th>Submitted</th><th>Supplier</th><th>Invoice no.</th><th>PO / GRPO</th><th class="num">Amount</th><th>Checks</th><th>Status</th></tr></thead><tbody>
+    ${rows.map(i=>{ const m=i.match||{lines:[]}; const pOk=m.lines.length&&m.lines.every(l=>l.priceOk); const qOk=m.lines.length&&m.lines.every(l=>l.qtyOk);
+      const pos=[...new Set(m.lines.map(l=>l.poNo).filter(Boolean))], grs=[...new Set(m.lines.flatMap(l=>l.grpoNos||[]))];
+      return `<tr class="click" data-open="${esc(i.id)}" tabindex="0"><td class="mono small">${fmtDT(i.submittedAt)}${i.sample?` <span class="tag">SAMPLE</span>`:""}</td><td><b>${esc(i.vendorName)}</b><div class="small muted mono">${esc(i.vendorCode)}</div></td><td class="mono">${esc(i.extracted?.invoiceNo||"—")}<div class="small muted">${fmtDate(i.extracted?.invoiceDate)}</div></td><td class="mono small">${pos.map(esc).join(", ")||"—"}<div class="muted">${grs.map(esc).join(", ")}</div></td><td class="num">${fmtAmt(invTotal(i),i.extracted?.currency)}</td><td><span class="chk ${pOk?"y":"n"}">Price ${pOk?"✓":"✕"}</span> <span class="chk ${qOk?"y":"n"}">Qty ${qOk?"✓":"✕"}</span></td><td>${pill(i.status)}</td></tr>`; }).join("") || `<tr><td colspan="7" class="empty">Nothing here.</td></tr>`}
+    </tbody></table></div>
+  </section>`;
+}
+
+// ---- drawer
+function renderDrawer(){
+  const root=$("#drawerRoot");
+  const inv = S.openId && S.invoices.find(i=>i.id===S.openId);
+  if (!inv || S.session?.role!=="staff"){ root.innerHTML=""; root.dataset.sig=""; return; }
+  const sig = inv.id+"|"+(inv.updatedAt||"")+"|"+inv.status;
+  if (root.dataset.sig===sig && root.firstChild) return;
+  root.dataset.sig=sig;
+  const m = inv.match || {lines:[],reasons:[],warnings:[]}; const e=inv.extracted||{}; const cur=e.currency||"PHP";
+  const vcls = ["ready","approved","paid"].includes(inv.status)?"ready":inv.status==="review"?"review":"exception";
+  const title = {ready:"Clear — ready for payment",approved:"Approved for payment (override)",paid:"Paid",exception:"Exception — hold",review:"Needs review",rejected:"Returned to supplier"}[inv.status];
+  const edited = inv.scanned && inv.supplierEdits?.length;
+  const lines = m.lines.map(l=>`<tr>
+    <td class="small">${l.idx+1}</td>
+    <td style="min-width:140px">${esc(l.invDesc)}<div class="small muted mono">${esc(l.invItem)}</div></td>
+    <td class="num">${fmtQty(l.invQty)} <span class="muted small">${esc(l.invUom)}</span></td>
+    <td class="num">${fmtAmt(l.invPrice,"")}</td>
+    <td class="sep mono small">${l.found?`${esc(l.poNo)} / ${esc(l.poLine)}`:`<span style="color:var(--bad)">${esc(l.issue)}</span>`}${l.found?`<div class="muted" style="font-family:var(--sans)">${esc(l.poDesc||"")}</div>`:""}</td>
+    <td class="num">${l.found?fmtAmt(l.poPrice,""):"—"}</td>
+    <td class="num">${l.found?`<span class="chk ${l.priceOk?"y":"n"}">${fmtPct(l.priceVarPct)}</span>`:"—"}</td>
+    <td class="sep num">${l.found?fmtQty(l.received):"—"}<div class="small muted mono">${esc((l.grpoNos||[]).join(", "))}</div></td>
+    <td class="num">${l.found?fmtQty(l.billedElsewhere):"—"}</td>
+    <td class="num">${l.found?`<span class="chk ${l.qtyOk?"y":"n"}">${fmtQty(l.available)}</span>`:"—"}</td>
+  </tr>`).join("");
+  root.innerHTML = `<div class="drawer-bg" id="dbg"></div>
+  <aside class="drawer" role="dialog" aria-modal="true" aria-label="Invoice detail">
+    <div class="drawer-h"><h2>${esc(inv.vendorName)} · <span class="mono">${esc(e.invoiceNo||"—")}</span></h2>${pill(inv.status)}<button class="btn sm" id="dclose">Close</button></div>
+    <div class="drawer-b">
+      <div class="stack">
+        <div class="preview" id="pv">${(inv.pageCount||0)>0?`<div class="ph"><div class="spinner"></div></div>`:`<div class="ph" style="aspect-ratio:auto;padding:24px 12px">${inv.sample?"Sample record — no file attached.":"No preview stored."}</div>`}</div>
+        ${inv.assetId?`<a class="btn sm" href="/_blob/${esc(inv.assetId)}" target="_blank" rel="noopener">Open original file</a>`:""}
+        <div class="panel"><div class="panel-b"><div class="eyebrow" style="margin-bottom:8px">History</div><ul class="history">${(inv.history||[]).slice().reverse().map(h=>`<li><time>${fmtDT(h.at)}</time><span><b>${esc(h.by)}</b> — ${esc(h.e)}</span></li>`).join("")||"<li class='muted'>—</li>"}</ul></div></div>
+      </div>
+      <div class="stack">
+        <div class="verdict ${vcls}"><div class="seal">${vcls==="ready"?"✓":vcls==="review"?"?":"!"}</div><div style="min-width:0"><div class="big">${title}</div>
+          <div class="small">System verdict at ${fmtDT(m.checkedAt)}: <b>${m.verdict==="ready"?"PO price and GRPO quantity match":m.verdict==="review"?"incomplete reading":"mismatch found"}</b></div>
+          ${m.reasons?.length?`<ul>${m.reasons.map(r=>`<li>${esc(r)}</li>`).join("")}</ul>`:""}
+          ${m.warnings?.length?`<ul class="small" style="opacity:.85">${m.warnings.map(r=>`<li>Note: ${esc(r)}</li>`).join("")}</ul>`:""}
+          ${inv.overrideReason?`<div class="small" style="margin-top:6px">Override reason: ${esc(inv.overrideReason)}</div>`:""}
+          ${inv.rejectReason?`<div class="small" style="margin-top:6px">Return reason: ${esc(inv.rejectReason)}</div>`:""}
+          ${inv.payment?`<div class="small" style="margin-top:6px">Paid ${fmtDate(inv.payment.date)} · Ref <span class="mono">${esc(inv.payment.ref)}</span></div>`:""}
+        </div></div>
+        ${edited?`<div class="note warn">Supplier changed scanned values before submitting: ${inv.supplierEdits.map(esc).join("; ")}.</div>`:""}
+        ${e.notes?`<div class="note">Scanner note: ${esc(e.notes)}</div>`:""}
+        <div class="panel"><div class="panel-b"><dl class="kv" style="margin:0">
+          <div><dt>Supplier (portal)</dt><dd>${esc(inv.vendorName)} <span class="mono small muted">${esc(inv.vendorCode)}</span></dd></div>
+          <div><dt>Name on invoice</dt><dd>${esc(e.supplierName||"—")}</dd></div>
+          <div><dt>TIN</dt><dd class="mono">${esc(e.supplierTIN||"—")}</dd></div>
+          <div><dt>Invoice date</dt><dd>${fmtDate(e.invoiceDate)}</dd></div>
+          <div><dt>PO ref</dt><dd class="mono">${esc((e.poNumbers||[]).join(", ")||"—")}</dd></div>
+          <div><dt>DR ref</dt><dd class="mono">${esc((e.drNumbers||[]).join(", ")||"—")}</dd></div>
+          <div><dt>VAT</dt><dd class="mono">${fmtAmt(e.vatAmount,cur)}</dd></div>
+          <div><dt>Total due</dt><dd class="mono"><b>${fmtAmt(invTotal(inv),cur)}</b></dd></div>
+          <div><dt>Read confidence</dt><dd>${esc(e.confidence||"—")}${inv.scanned?"":" (typed by supplier)"}</dd></div>
+        </dl></div></div>
+        <div class="panel"><div class="panel-h"><h2>Three-way match</h2><span class="small muted">Price tol. ±${settings().priceTolPct}% · Qty tol. ${settings().qtyTolPct}%</span></div>
+          <div class="tbl-wrap"><table class="match-tbl"><thead>
+            <tr><th colspan="4" class="grp">Supplier invoice</th><th colspan="3" class="grp sep">SAP purchase order</th><th colspan="3" class="grp sep">SAP goods receipt (GRPO)</th></tr>
+            <tr><th>#</th><th>Item</th><th class="num">Qty</th><th class="num">Unit price</th><th class="sep">PO / line</th><th class="num">PO price</th><th class="num">Var.</th><th class="sep num">Received</th><th class="num">Billed before</th><th class="num">Open to bill</th></tr>
+          </thead><tbody>${lines||`<tr><td colspan="10" class="empty">No lines to match.</td></tr>`}</tbody></table></div>
+        </div>
+        <div class="panel"><div class="panel-b stack">
+          <div class="row">
+            <button class="btn" id="d-rematch">Re-run match</button>
+            <button class="btn" id="d-edit">Correct details</button>
+            <span style="flex:1"></span>
+            ${inv.status==="exception"||inv.status==="review"?`<button class="btn ok" id="d-approve">Approve anyway…</button>`:""}
+            ${["ready","approved"].includes(inv.status)?`<button class="btn primary" id="d-paid">Mark as paid…</button>`:""}
+            ${inv.status!=="paid"&&inv.status!=="rejected"?`<button class="btn danger" id="d-reject">Return to supplier…</button>`:""}
+            ${inv.status==="rejected"?`<button class="btn" id="d-reopen">Reopen</button>`:""}
+          </div>
+          <div id="d-action"></div>
+        </div></div>
+      </div>
+    </div>
+  </aside>`;
+  $("#dbg").onclick = $("#dclose").onclick = ()=>{ S.openId=null; renderDrawer(); };
+  $("#dclose").focus();
+  if ((inv.pageCount||0)>0) loadPreviews(inv);
+  $("#d-rematch").onclick = async ()=>{ const mm=runMatch(inv); const st = ["paid","rejected","approved"].includes(inv.status)?inv.status:mm.verdict; await patchInvoice(inv,{match:mm,status:st},`Re-ran match → ${STATUS[mm.verdict].label}`); toast("Match re-run: "+(STATUS[mm.verdict]?.label||mm.verdict)); };
+  const act = $("#d-action");
+  const reasonBox = (label, btnLabel, cb, extra="") => { act.innerHTML = `<div class="inline-conf">${extra}<div class="field" style="flex:1;min-width:200px"><label for="d-reason">${label}</label><input class="input" id="d-reason"></div><button class="btn primary" id="d-confirm">${btnLabel}</button><button class="btn ghost" id="d-cancel">Cancel</button></div>`; $("#d-reason").focus(); $("#d-cancel").onclick=()=>act.innerHTML=""; $("#d-confirm").onclick=cb; };
+  if ($("#d-approve")) $("#d-approve").onclick = ()=>reasonBox("Reason for approving despite the exception (logged)","Approve for payment", async()=>{ const r=$("#d-reason").value.trim(); if(!r) return toast("Enter a reason."); await patchInvoice(inv,{status:"approved",overrideReason:r},`Approved with override: ${r}`); toast("Approved for payment"); });
+  if ($("#d-reject")) $("#d-reject").onclick = ()=>reasonBox("Reason shown to the supplier","Return invoice", async()=>{ const r=$("#d-reason").value.trim(); if(!r) return toast("Enter a reason."); await patchInvoice(inv,{status:"rejected",rejectReason:r},`Returned to supplier: ${r}`); toast("Returned to supplier"); });
+  if ($("#d-reopen")) $("#d-reopen").onclick = async ()=>{ const mm=runMatch(inv); await patchInvoice(inv,{status:mm.verdict,match:mm,rejectReason:""},"Reopened"); };
+  if ($("#d-paid")) $("#d-paid").onclick = ()=>{ act.innerHTML = `<div class="inline-conf"><div class="field"><label for="d-pdate">Payment date</label><input class="input" type="date" id="d-pdate" value="${new Date().toISOString().slice(0,10)}"></div><div class="field" style="flex:1;min-width:160px"><label for="d-pref">Check / transfer ref. or SAP outgoing payment no.</label><input class="input mono" id="d-pref"></div><button class="btn primary" id="d-confirm">Mark paid</button><button class="btn ghost" id="d-cancel">Cancel</button></div>`; $("#d-cancel").onclick=()=>act.innerHTML=""; $("#d-confirm").onclick=async()=>{ const ref=$("#d-pref").value.trim(); if(!ref) return toast("Enter the payment reference."); await patchInvoice(inv,{status:"paid",payment:{date:$("#d-pdate").value,ref}},`Marked paid, ref ${ref}`); toast("Marked as paid"); }; };
+  $("#d-edit").onclick = ()=>{ act.innerHTML = staffEditForm(inv); bindStaffEdit(inv); };
+}
+function staffEditForm(inv){
+  const e=inv.extracted||{};
+  return `<div class="stack" style="border:1px solid var(--line);border-radius:10px;padding:12px">
+    <div class="grid g4">
+      <div class="field"><label for="se-invno">Invoice no.</label><input class="input mono" id="se-invno" value="${esc(e.invoiceNo)}"></div>
+      <div class="field"><label for="se-po">PO no(s).</label><input class="input mono" id="se-po" value="${esc((e.poNumbers||[]).join(", "))}"></div>
+      <div class="field"><label for="se-vat">VAT</label><input class="input num" id="se-vat" value="${e.vatAmount??""}"></div>
+      <div class="field"><label for="se-total">Total due</label><input class="input num" id="se-total" value="${e.totalAmount??""}"></div>
+    </div>
+    <div class="tbl-wrap"><table class="lines-edit"><thead><tr><th>PO</th><th>Description</th><th class="num">Qty</th><th>UoM</th><th class="num">Unit price</th><th class="num">Amount</th></tr></thead><tbody>
+    ${(e.lines||[]).map((l,i)=>`<tr><td><input class="input mono" id="se-po-${i}" value="${esc(l.poNo)}" style="width:100px"></td><td><input class="input" id="se-desc-${i}" value="${esc(l.description)}" style="min-width:160px"></td><td><input class="input num" id="se-qty-${i}" value="${l.qty??""}" style="width:90px"></td><td><input class="input" id="se-uom-${i}" value="${esc(l.uom)}" style="width:60px"></td><td><input class="input num" id="se-price-${i}" value="${l.unitPrice??""}" style="width:100px"></td><td><input class="input num" id="se-amt-${i}" value="${l.amount??""}" style="width:110px"></td></tr>`).join("")}
+    </tbody></table></div>
+    <div class="row"><span class="small muted" style="flex:1">Correct misread values from the invoice image, then save to re-run the match. The change is logged.</span><button class="btn ghost" id="se-cancel">Cancel</button><button class="btn primary" id="se-save">Save & re-match</button></div>
+  </div>`;
+}
+function bindStaffEdit(inv){
+  $("#se-cancel").onclick=()=>$("#d-action").innerHTML="";
+  $("#se-save").onclick=async()=>{
+    const e = JSON.parse(JSON.stringify(inv.extracted||{}));
+    e.invoiceNo=$("#se-invno").value.trim(); e.poNumbers=$("#se-po").value.split(/[,;\s]+/).filter(Boolean); e.vatAmount=n($("#se-vat").value); e.totalAmount=n($("#se-total").value);
+    (e.lines||[]).forEach((l,i)=>{ l.poNo=$("#se-po-"+i).value.trim(); l.description=$("#se-desc-"+i).value; l.qty=n($("#se-qty-"+i).value); l.uom=$("#se-uom-"+i).value; l.unitPrice=n($("#se-price-"+i).value); l.amount=n($("#se-amt-"+i).value); });
+    const tmp = Object.assign({}, inv, {extracted:e}); const mm=runMatch(tmp);
+    await patchInvoice(inv,{extracted:e,match:mm,status:mm.verdict},`Corrected invoice details; re-match → ${STATUS[mm.verdict].label}`);
+    toast("Saved. Verdict: "+STATUS[mm.verdict].label);
+  };
+}
+const previewCache = {};
+async function loadPreviews(inv){
+  const pv=$("#pv"); if(!pv) return;
+  if (!previewCache[inv.id]){
+    const imgs=[];
+    for (let i=0;i<inv.pageCount;i++){ try{ const d=await S.db.doc("invoice_files/"+inv.id+"-p"+(i+1)).get(); if(d.exists&&d.data().dataUrl) imgs.push(d.data().dataUrl); }catch(e){} }
+    previewCache[inv.id]=imgs;
+  }
+  const el=$("#pv"); if(!el || S.openId!==inv.id) return;
+  const imgs=previewCache[inv.id];
+  el.innerHTML = imgs.length ? imgs.map((u,i)=>`<img src="${u}" alt="Invoice page ${i+1}">`).join("") : `<div class="ph">Preview not available.</div>`;
+}
+
+// ---- SAP data (IT)
+function sapView(){
+  const m=S.meta||{};
+  const poLines = S.pos.reduce((a,p)=>a+(p.lines||[]).length,0), grLines=S.grpos.reduce((a,g)=>a+(g.lines||[]).length,0);
+  const recentPO = S.pos.slice().sort((a,b)=>String(b.docDate).localeCompare(String(a.docDate))).slice(0,12);
+  const recentGR = S.grpos.slice().sort((a,b)=>String(b.docDate).localeCompare(String(a.docDate))).slice(0,12);
+  const hasSample = S.pos.some(p=>p.sample)||S.grpos.some(g=>g.sample)||S.invoices.some(i=>i.sample);
+  return `<div class="stack" style="margin-top:20px">
+  <div class="note">IT exports open purchase orders (OPOR/POR1) and goods receipt POs (OPDN/PDN1) from SAP as CSV and imports them here. Re-importing a PO or GRPO number replaces it with the latest version. Keep the import to open and recently received documents — the portal holds up to about 4,000 documents in total.</div>
+  ${hasSample?`<div class="note warn row"><span style="flex:1">Sample POs, GRPOs and invoices are loaded so you can see how matching works. Clear them before go-live.</span><button class="btn sm danger" id="clear-sample">Clear sample data</button></div>`:""}
+  <div class="grid g2">
+    ${["po","grpo"].map(k=>`<section class="panel"><div class="panel-h"><h2>${k==="po"?"Purchase orders (price)":"Goods receipt POs (quantity)"}</h2><span class="tag">${k==="po"?`${S.pos.length} POs · ${poLines} lines`:`${S.grpos.length} GRPOs · ${grLines} lines`}</span></div>
+      <div class="panel-b stack">
+        <div class="small muted">Last import: ${m[k]?`${fmtDT(m[k].at)} by ${esc(m[k].by)} · ${m[k].docs} docs`:"never"}</div>
+        <div class="row"><label class="btn primary" for="imp-${k}">Import ${k==="po"?"PO":"GRPO"} CSV</label><input type="file" id="imp-${k}" accept=".csv,.txt,text/csv,text/plain" hidden><button class="btn sm" data-tpl="${k}">Copy column template</button></div>
+        <div class="small muted">Columns: <span class="mono">${k==="po"?"DocNum, CardCode, CardName, DocDate, DocCur, LineNum, ItemCode, Dscription, Quantity, unitMsr, Price":"DocNum, CardCode, CardName, DocDate, BaseRef (PO no.), BaseLine (PO line), ItemCode, Dscription, Quantity, unitMsr"}</span></div>
+        <div id="imp-status-${k}"></div>
+      </div></section>`).join("")}
+  </div>
+  <div class="grid g2">
+    <section class="panel"><div class="panel-h"><h2>Latest POs</h2></div><div class="tbl-wrap"><table><thead><tr><th>PO</th><th>Vendor</th><th>Date</th><th class="num">Lines</th><th class="num">Value</th></tr></thead><tbody>
+      ${recentPO.map(p=>`<tr><td class="mono">${esc(p.poNo)}${p.sample?` <span class="tag">SAMPLE</span>`:""}</td><td>${esc(p.vendorName||p.vendorCode)}</td><td class="small">${fmtDate(p.docDate)}</td><td class="num">${(p.lines||[]).length}</td><td class="num">${fmtAmt((p.lines||[]).reduce((a,l)=>a+(n(l.qty)||0)*(n(l.price)||0),0),p.currency)}</td></tr>`).join("")||`<tr><td colspan="5" class="empty">No POs imported.</td></tr>`}
+    </tbody></table></div></section>
+    <section class="panel"><div class="panel-h"><h2>Latest GRPOs</h2></div><div class="tbl-wrap"><table><thead><tr><th>GRPO</th><th>PO</th><th>Vendor</th><th>Posted</th><th class="num">Qty</th></tr></thead><tbody>
+      ${recentGR.map(g=>`<tr><td class="mono">${esc(g.grpoNo)}${g.sample?` <span class="tag">SAMPLE</span>`:""}</td><td class="mono">${esc(g.poNo)}</td><td>${esc(g.vendorName||g.vendorCode)}</td><td class="small">${fmtDate(g.docDate)}</td><td class="num">${fmtQty((g.lines||[]).reduce((a,l)=>a+(n(l.qty)||0),0))}</td></tr>`).join("")||`<tr><td colspan="5" class="empty">No GRPOs imported.</td></tr>`}
+    </tbody></table></div></section>
+  </div></div>`;
+}
+async function importFile(kind, file){
+  const st=$("#imp-status-"+kind);
+  const show = (h)=>{ const el=$("#imp-status-"+kind); if(el) el.innerHTML=h; };
+  try{
+    const text = await file.text(); const rows=parseCSV(text);
+    if (rows.length<2) throw new Error("The file has no data rows.");
+    const docs = kind==="po"?buildPOs(rows):buildGRPOs(rows);
+    if (!docs.length) throw new Error("No documents found — check the DocNum column.");
+    const col = kind==="po"?"sap_po":"sap_grpo"; let done=0;
+    show(`<div class="progress"><i style="width:0%"></i></div><div class="small muted">Importing ${docs.length} documents…</div>`);
+    const queue = docs.slice(); const at=nowISO();
+    const worker = async()=>{ while(queue.length){ const d=queue.shift(); const id=(kind==="po"?"PO-":"GR-")+safeId(kind==="po"?d.poNo:d.grpoNo);
+      let tries=0; for(;;){ try{ await S.db.doc(col+"/"+id).set(Object.assign(d,{importedAt:at})); break; }catch(e){ if(e?.code==="unavailable"&&tries++<1){ await new Promise(r=>setTimeout(r,600+Math.random()*600)); continue; } throw e; } }
+      done++; const bar=$("#imp-status-"+kind+" .progress>i"); if(bar) bar.style.width=(done/docs.length*100)+"%"; } };
+    await Promise.all([worker(),worker(),worker(),worker()]);
+    const meta = Object.assign({}, S.meta||{}); meta[kind]={at, by:S.session.label, docs:docs.length, rows:rows.length-1};
+    await S.db.doc("settings/sap_import").set(meta);
+    toast(`Imported ${docs.length} ${kind==="po"?"POs":"GRPOs"}`);
+    await recheckExceptions(true);
+  }catch(e){
+    const msg = e?.code==="quota_exceeded" ? "The portal's storage is full. Remove old POs/GRPOs (keep only open documents) and try again." : (e?.message||String(e));
+    show(`<div class="note bad">Import stopped: ${esc(msg)}</div>`);
+  }
+}
+async function recheckExceptions(silent){
+  const open = S.invoices.filter(i=>["exception","review"].includes(i.status));
+  let cleared=0;
+  for (const inv of open){ const mm=runMatch(inv);
+    const changed = mm.verdict!==inv.status || JSON.stringify(mm.reasons)!==JSON.stringify(inv.match?.reasons||[]);
+    if (changed){ await patchInvoice(inv,{match:mm,status:mm.verdict}, mm.verdict!==inv.status?`Auto re-check → ${STATUS[mm.verdict].label}`:null); if(mm.verdict==="ready") cleared++; } }
+  if (!silent || cleared) toast(`Re-checked ${open.length} open invoice${open.length===1?"":"s"} · ${cleared} now ready for payment`);
+}
+
+// ---- suppliers
+function suppliersView(){
+  const vs=vendorList();
+  return `<section class="panel" style="margin-top:20px"><div class="panel-h"><h2>Supplier access</h2><span class="small muted">Suppliers come from imported POs. Enable a supplier and give them their access code.</span></div>
+  <div class="tbl-wrap"><table><thead><tr><th>Vendor code</th><th>Supplier</th><th>Access code</th><th>Portal access</th><th class="num">Submitted</th><th></th></tr></thead><tbody>
+  ${vs.map((v,i)=>`<tr><td class="mono">${esc(v.code)}</td><td>${esc(v.name)}</td><td><input class="input mono" id="ac-${i}" value="${esc(v.accessCode||"")}" style="width:130px" placeholder="—"></td><td><label class="row" style="gap:6px"><input type="checkbox" id="en-${i}" ${v.active?"checked":""}> Enabled</label></td><td class="num">${S.invoices.filter(x=>x.vendorCode===v.code).length}</td><td><div class="row"><button class="btn sm" data-gen="${i}">Generate</button><button class="btn sm primary" data-savev="${i}">Save</button></div></td></tr>`).join("") || `<tr><td colspan="6" class="empty">Import POs first — suppliers appear automatically.</td></tr>`}
+  </tbody></table></div>
+  <div class="panel-b"><div class="note">Access codes are a sign-in convenience that keeps suppliers to their own invoices on screen, not a security boundary. Only people you share this portal with on claude.ai can open it.</div></div></section>`;
+}
+// ---- settings
+function settingsView(){
+  const c=settings();
+  return `<section class="panel" style="margin-top:20px;max-width:760px"><div class="panel-h"><h2>Matching rules</h2></div>
+  <div class="panel-b stack">
+    <div class="grid g3">
+      <div class="field"><label for="st-price">Unit price tolerance vs PO (±%)</label><input class="input num" id="st-price" value="${c.priceTolPct}"></div>
+      <div class="field"><label for="st-qty">Quantity tolerance over GRPO (%)</label><input class="input num" id="st-qty" value="${c.qtyTolPct}"></div>
+      <div class="field"><label for="st-amt">Rounding tolerance on amounts (PHP)</label><input class="input num" id="st-amt" value="${c.amountTol}"></div>
+    </div>
+    <div class="note">An invoice is <b>cleared for payment</b> only when every line (1) finds its SAP PO line for the same supplier, (2) has a unit price within the price tolerance of the PO price, and (3) bills a quantity no greater than what the GRPOs received minus what earlier cleared invoices already billed. Duplicate invoice numbers per supplier are held. Totals that don't foot are noted for the reviewer but don't block by themselves.</div>
+    <div class="hr"></div>
+    <div class="grid g3"><div class="field"><label for="st-pin">Staff PIN</label><input class="input mono" id="st-pin" value="${esc(c.staffPin)}"></div></div>
+    <div class="row"><button class="btn primary" id="st-save">Save rules</button></div>
+  </div></section>`;
+}
+
+// ---------- binding ----------
+function bindView(){
+  const app=$("#app");
+  // supplier upload
+  const fi=$("#file-in"); if (fi) fi.onchange=()=>fi.files[0]&&startUpload(fi.files[0]);
+  const drop=$("#drop");
+  if (drop){
+    drop.addEventListener("dragover",e=>{e.preventDefault();drop.classList.add("over");});
+    drop.addEventListener("dragleave",()=>drop.classList.remove("over"));
+    drop.addEventListener("drop",e=>{e.preventDefault();drop.classList.remove("over"); const f=e.dataTransfer.files[0]; if(f) startUpload(f);});
+  }
+  if ($("#scan-stop")) $("#scan-stop").onclick=()=>{ S.draft.ctl?.abort(); };
+  if (S.draft?.stage==="review"){
+    app.querySelectorAll("[data-h]").forEach(inp=>inp.oninput=()=>{ const k=inp.dataset.h; const e=S.draft.extracted;
+      if (k==="poNumbers"||k==="drNumbers") e[k]=inp.value.split(/[,;]+/).map(s=>s.trim()).filter(Boolean);
+      else if (k==="vatAmount"||k==="totalAmount") e[k]=n(inp.value); else e[k]=inp.value; });
+    app.querySelectorAll("[data-l]").forEach(inp=>inp.oninput=()=>{ const l=S.draft.extracted.lines[+inp.dataset.l]; const f=inp.dataset.f; l[f]=["qty","unitPrice","amount"].includes(f)?n(inp.value):inp.value; });
+    app.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{ S.draft.extracted.lines.splice(+b.dataset.del,1); render(); });
+    $("#add-line").onclick=()=>{ S.draft.extracted.lines.push({poNo:"",itemCode:"",description:"",qty:null,uom:"",unitPrice:null,amount:null}); render(); };
+    if ($("#rescan")) $("#rescan").onclick=()=>doScan();
+    $("#cancel-draft").onclick=()=>{ S.draft=null; render(); };
+    $("#submit-inv").onclick=submitDraft;
+  }
+  if ($("#new-upload")) $("#new-upload").onclick=()=>{ S.draft=null; render(); };
+  if ($("#goto-mine")) $("#goto-mine").onclick=()=>{ S.draft=null; S.tab="mine"; render(); };
+  // queue
+  app.querySelectorAll(".kpi").forEach(b=>b.onclick=()=>{ S.filter=b.dataset.k; render(); });
+  if ($("#flt")) $("#flt").onchange=e=>{ S.filter=e.target.value; render(); };
+  if ($("#q")) $("#q").oninput=e=>{ S.q=e.target.value; clearTimeout(bindView.t); bindView.t=setTimeout(render,200); };
+  app.querySelectorAll("[data-open]").forEach(r=>{ const open=()=>{ S.openId=r.dataset.open; renderDrawer(); }; r.onclick=open; r.onkeydown=e=>{ if(e.key==="Enter") open(); }; });
+  if ($("#recheck")) $("#recheck").onclick=async e=>{ e.target.disabled=true; await recheckExceptions(false); };
+  if ($("#export-ready")) $("#export-ready").onclick=exportReady;
+  // sap
+  ["po","grpo"].forEach(k=>{ const el=$("#imp-"+k); if(el) el.onchange=()=>{ if(el.files[0]) importFile(k,el.files[0]); el.value=""; }; });
+  app.querySelectorAll("[data-tpl]").forEach(b=>b.onclick=async()=>{ const t=b.dataset.tpl==="po"?PO_TEMPLATE:GRPO_TEMPLATE; try{ await navigator.clipboard.writeText(t); toast("Template copied — paste into Excel and save as CSV"); }catch(e){ const st=$("#imp-status-"+b.dataset.tpl); st.innerHTML=`<textarea class="input mono small" rows="3" readonly>${esc(t)}</textarea>`; st.querySelector("textarea").select(); } });
+  if ($("#clear-sample")) $("#clear-sample").onclick=clearSample;
+  // suppliers
+  const vs = vendorList();
+  app.querySelectorAll("[data-gen]").forEach(b=>b.onclick=()=>{ const i=b.dataset.gen; $("#ac-"+i).value=String(Math.floor(100000+Math.random()*900000)); $("#en-"+i).checked=true; });
+  app.querySelectorAll("[data-savev]").forEach(b=>b.onclick=async()=>{ const i=+b.dataset.savev; const v=vs[i]; const code=$("#ac-"+i).value.trim(); const active=$("#en-"+i).checked; if(active&&!code) return toast("Set an access code before enabling.");
+    await S.db.doc("vendors/"+safeId(v.code)).set({code:v.code,name:v.name,accessCode:code,active,updatedAt:nowISO(),updatedBy:S.session.label}); toast(`Saved ${v.name}`); });
+  // settings
+  if ($("#st-save")) $("#st-save").onclick=async()=>{ const p=n($("#st-price").value), q=n($("#st-qty").value), a=n($("#st-amt").value), pin=$("#st-pin").value.trim();
+    if (p==null||q==null||a==null||p<0||q<0||a<0) return toast("Tolerances must be zero or positive numbers.");
+    if (pin.length<4) return toast("PIN needs at least 4 characters.");
+    await S.db.doc("settings/app").set(Object.assign({},settings(),{priceTolPct:p,qtyTolPct:q,amountTol:a,staffPin:pin,updatedBy:S.session.label,updatedAt:nowISO()})); toast("Rules saved. Use Re-check on the queue to apply them to open exceptions."); };
+}
+
+// ---------- supplier flow ----------
+async function startUpload(file){
+  if (file.size > 25*1024*1024) return toast("File is over 25 MB. Upload a smaller scan.");
+  S.draft = {stage:"reading", file, fileName:file.name, extracted:cleanExtract({}), previews:[], canvases:[], scanned:false};
+  render();
+  try{
+    const {canvases,pages,text} = await fileToPageCanvases(file, Math.max(3, S.imgLimits?.maxCount||3));
+    S.draft.canvases=canvases; S.draft.pageTotal=pages; S.draft.pdfText = text ?? null;
+    S.draft.previews = canvases.map(c=>compressedDataURL(c)).filter(Boolean);
+  }catch(e){ S.draft.stage="review"; S.draft.error=e.message||String(e); render(); return; }
+  if (!S.sampleChecked && S.sampleReady) await Promise.race([S.sampleReady, new Promise(r=>setTimeout(r,12000))]);
+  if (S.sample && (S.imgLimits || (S.draft.pdfText||"").replace(/\s/g,"").length>40)) await doScan();
+  else { S.draft.stage="review"; S.draft.error = !S.sample ? "Auto-fill scanner isn't available in this view. Type the details from the invoice." : S.draft.pdfText!=null ? "This PDF is a scanned image with no text, and this view can't read images. Type the details, or ask the supplier for a text PDF." : "This view can't read photos. Type the details, or upload the invoice as a PDF."; render(); }
+}
+async function doScan(){
+  const d=S.draft; d.stage="scanning"; d.error=""; d.ctl=new AbortController(); render();
+  try{
+    const {raw,via} = await scanDocument(d, S.session.vendorCode, d.ctl.signal);
+    d.extracted = cleanExtract(raw); d.scanned=true; d.scanVia=via;
+    const filled = ["invoiceNo","invoiceDate","supplierTIN","totalAmount"].filter(k=>d.extracted[k]!==""&&d.extracted[k]!=null).length + (d.extracted.poNumbers.length?1:0);
+    if (!filled && !d.extracted.lines.length) d.error = "The scan ran but found no invoice details. Check that the file is the invoice and is legible, then press Scan again or type the details."; d.scannedCopy=JSON.parse(JSON.stringify(d.extracted));
+    if (!d.extracted.lines.length) d.extracted.lines.push({poNo:"",itemCode:"",description:"",qty:null,uom:"",unitPrice:null,amount:null});
+  }catch(e){
+    if (e?.code!=="cancelled") d.error = (SAMPLE_ERR[e?.code] || "Scanning didn't finish. Press Scan again, or type the details below.") + (e?.code?` [${e.code}]`:"");
+    if (!d.extracted.lines.length) d.extracted.lines.push({poNo:"",itemCode:"",description:"",qty:null,uom:"",unitPrice:null,amount:null});
+  }
+  d.stage="review"; render();
+}
+function diffEdits(a,b){
+  if (!a) return [];
+  const out=[]; const f=v=>v==null?"":String(v);
+  for (const k of ["invoiceNo","invoiceDate","supplierTIN","currency","vatAmount","totalAmount"]) if (f(a[k])!==f(b[k])) out.push(`${k} "${f(a[k])}" → "${f(b[k])}"`);
+  if ((a.poNumbers||[]).join(",")!==(b.poNumbers||[]).join(",")) out.push(`PO "${(a.poNumbers||[]).join(",")}" → "${(b.poNumbers||[]).join(",")}"`);
+  const L=Math.max(a.lines.length,b.lines.length);
+  for (let i=0;i<L;i++){ const x=a.lines[i], y=b.lines[i]; if(!x){out.push(`line ${i+1} added`);continue;} if(!y){out.push(`line ${i+1} removed`);continue;}
+    for (const k of ["poNo","qty","unitPrice","amount","description"]) if (f(x[k])!==f(y[k])) out.push(`line ${i+1} ${k} "${f(x[k])}" → "${f(y[k])}"`); }
+  return out.slice(0,20);
+}
+async function submitDraft(){
+  const d=S.draft; const e=d.extracted;
+  e.lines = e.lines.filter(l=>l.description||l.qty!=null||l.unitPrice!=null);
+  if (!e.invoiceNo) return toast("Enter the invoice number.");
+  if (!e.lines.length) return toast("Add at least one invoice line.");
+  if (e.lines.some(l=>l.qty==null||l.unitPrice==null)) return toast("Each line needs a quantity and unit price.");
+  const btn=$("#submit-inv"); if(btn){btn.disabled=true;btn.textContent="Submitting…";}
+  try{
+    const id = "INV-"+Date.now().toString(36).toUpperCase()+"-"+Math.random().toString(36).slice(2,6).toUpperCase();
+    const vendor = vendorList().find(v=>v.code===S.session.vendorCode)||{};
+    let assetId=null;
+    if (S.assets){ try{ const r=await S.assets.upload(d.file, d.file.type?undefined:{type:"application/pdf"}); assetId=r.id; }catch(err){ assetId=null; } }
+    let pageCount=0;
+    for (let i=0;i<d.previews.length;i++){ try{ await S.db.doc("invoice_files/"+id+"-p"+(i+1)).set({invoiceId:id,page:i+1,dataUrl:d.previews[i]}); pageCount++; }catch(err){ break; } }
+    const inv = { id, vendorCode:S.session.vendorCode, vendorName:vendor.name||S.session.label, fileName:d.fileName, assetId, pageCount, pageTotal:d.pageTotal||pageCount,
+      extracted:e, scanned:d.scanned, supplierEdits:d.scanned?diffEdits(d.scannedCopy,e):[], submittedAt:nowISO(), updatedAt:nowISO(), history:[] };
+    const mm = runMatch(inv); inv.match=mm; inv.status=mm.verdict;
+    inv.history=[{at:inv.submittedAt,by:S.session.label,e:`Submitted (${d.scanned?"scanned":"typed"}) → system verdict: ${STATUS[mm.verdict].label}`}];
+    await saveInvoice(id, inv);
+    S.draft={stage:"done",invId:id}; render();
+  }catch(err){
+    toast(err?.code==="quota_exceeded"?"The portal's storage is full. Contact Flexo Accounting.":"Couldn't submit — check your connection and press Submit again.");
+    if(btn){btn.disabled=false;btn.textContent="Submit to Flexo";}
+  }
+}
+
+// ---------- export / housekeeping ----------
+async function exportReady(){
+  const rows = S.invoices.filter(i=>["ready","approved"].includes(i.status));
+  const q = v => `"${String(v??"").replace(/"/g,'""')}"`;
+  const lines=[["Status","Vendor Code","Vendor","Invoice No","Invoice Date","PO No","PO Line","GRPO No","Item","Qty","UoM","Unit Price","Line Amount","VAT","Invoice Total","Currency","Override Reason","Submitted"].join(",")];
+  for (const i of rows) for (const l of (i.match?.lines||[])) lines.push([STATUS[i.status].label,i.vendorCode,i.vendorName,i.extracted?.invoiceNo,i.extracted?.invoiceDate,l.poNo,l.poLine,(l.grpoNos||[]).join(" "),l.invDesc,l.invQty,l.invUom||l.poUom,l.invPrice,l.invAmount??(l.invQty*l.invPrice),i.extracted?.vatAmount,invTotal(i),i.extracted?.currency||"PHP",i.overrideReason||"",i.submittedAt].map(q).join(","));
+  const data = lines.join("\r\n");
+  if (!S.downloads){ toast("Downloads aren't available in this view."); return; }
+  try{ const r=await S.downloads.save({filename:`flexo-ready-for-payment-${new Date().toISOString().slice(0,10)}.csv`, data}); if(r.status==="saved") toast("Saved"); }catch(e){ if(e?.code!=="cancelled"&&e?.code!=="declined") toast("Download didn't complete."); }
+}
+let clearArm=false;
+async function clearSample(e){
+  const b=e.currentTarget;
+  if (!clearArm){ clearArm=true; b.textContent="Click again to confirm"; setTimeout(()=>{clearArm=false; if(b.isConnected) b.textContent="Clear sample data";},4000); return; }
+  b.disabled=true; b.textContent="Clearing…";
+  for (const p of S.pos.filter(x=>x.sample)) await S.db.doc("sap_po/"+p.id).delete();
+  for (const g of S.grpos.filter(x=>x.sample)) await S.db.doc("sap_grpo/"+g.id).delete();
+  for (const i of S.invoices.filter(x=>x.sample)){ for (let p=1;p<=(i.pageCount||0);p++) await S.db.doc("invoice_files/"+i.id+"-p"+p).delete(); await S.db.doc("invoices/"+i.id).delete(); }
+  for (const v of S.vendors.filter(x=>x.sample)) await S.db.doc("vendors/"+v.id).delete();
+  toast("Sample data cleared");
+}
+
+document.addEventListener("keydown",e=>{ if(e.key==="Escape" && S.openId){ S.openId=null; renderDrawer(); } });
+boot();
+})();
+</script>
+
+</body></html>

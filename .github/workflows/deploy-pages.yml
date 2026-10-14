@@ -1,0 +1,55 @@
+# Publishes public/ to GitHub Pages on every push to main (or on demand).
+# Set these under Settings → Secrets and variables → Actions → Variables:
+#   SUPABASE_URL       https://<project-ref>.supabase.co
+#   SUPABASE_ANON_KEY  the project's anon / publishable key (public by design)
+#   SCAN_ENABLED       "true" once the scan-invoice function is deployed (optional)
+name: Deploy portal to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write config.js
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+          SCAN_ENABLED: ${{ vars.SCAN_ENABLED }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "::error::Set the SUPABASE_URL and SUPABASE_ANON_KEY repository variables first."
+            exit 1
+          fi
+          node -e '
+            const cfg = {
+              supabaseUrl: process.env.SUPABASE_URL,
+              supabaseAnonKey: process.env.SUPABASE_ANON_KEY,
+              scanEnabled: process.env.SCAN_ENABLED === "true",
+            };
+            require("fs").writeFileSync("public/config.js", "window.FLEXO_CONFIG = " + JSON.stringify(cfg, null, 2) + ";\n");
+          '
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+      - id: deployment
+        uses: actions/deploy-pages@v4
