@@ -80,6 +80,8 @@ an invoice held for "no GRPO yet" clears by itself once the GRPO is imported.
 - **PO**: `DocNum, CardCode, CardName, DocDate, DocCur, LineNum, ItemCode, Dscription, Quantity, unitMsr, Price`
 - **GRPO**: `DocNum, CardCode, CardName, DocDate, BaseRef, BaseLine, ItemCode, Dscription, Quantity, unitMsr`
 
+Ready-made SAP B1 (HANA) export queries are in `sap/`: `export_po.sql`, `export_grpo.sql` and `checks.sql`. Set the FROM date in both export queries to the pilot start date.
+
 Common alternative header names are also accepted (e.g. `PONumber`, `UnitPrice`). Tab-separated files work too.
 
 ---
