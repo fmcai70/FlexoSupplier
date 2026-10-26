@@ -586,8 +586,8 @@ function renderTabs(tabs){
 }
 function supplierStrip(){
   return `<div class="flow" aria-label="How to submit">
-    <div class="flow-step"><span class="k">STEP 1</span><b>Upload invoice</b><span>PDF or photo — details are filled in automatically</span></div>
-    <div class="flow-step"><span class="k">STEP 2</span><b>Check the details</b><span>Correct anything misread so it matches your invoice</span></div>
+    <div class="flow-step"><span class="k">STEP 1</span><b>Upload invoice</b><span>PDF or photo of your printed invoice</span></div>
+    <div class="flow-step"><span class="k">STEP 2</span><b>Type the details</b><span>Invoice no., PO, and each line exactly as printed</span></div>
     <div class="flow-step"><span class="k">STEP 3</span><b>Submit to Flexo</b><span>Track processing and payment under My submissions</span></div>
   </div>`;
 }
@@ -648,6 +648,7 @@ function bindLogin(){
 
 // ---- supplier upload
 function scannerStatus(){
+  if (S.sampleChecked && !S.sample) return `<div class="note">After uploading, type the invoice details exactly as printed on your invoice.</div>`;
   if (!S.sampleChecked) return `<div class="note">Auto-fill scanner: connecting…</div>`;
   if (!S.sample) return `<div class="note warn">Auto-fill scanner isn't available in this view, so invoice details must be typed. Ask IT to deploy the scan-invoice Supabase function to enable auto-fill.</div>`;
   if (!S.imgLimits) return `<div class="note warn">Auto-fill works for PDF invoices with selectable text in this view. Photos and scanned images can't be read here — type their details, or upload the supplier's PDF.</div>`;
@@ -660,7 +661,7 @@ function uploadView(){
   if (!d || d.stage==="idle"){
     body = `<div class="drop" id="drop">
         <b>Drop your invoice here</b>
-        <p class="muted small" style="margin:6px 0 12px">PDF, JPG or PNG · one invoice per upload · first ${S.imgLimits?.maxCount||3} pages are read</p>
+        <p class="muted small" style="margin:6px 0 12px">PDF, JPG or PNG · one invoice per upload${S.sample?` · first ${S.imgLimits?.maxCount||3} pages are read`:""}</p>
         <label class="btn primary" for="file-in">Choose file</label>
         <input id="file-in" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" hidden>
       </div>
@@ -1041,6 +1042,7 @@ async function startUpload(file){
   }catch(e){ S.draft.stage="review"; S.draft.error=e.message||String(e); render(); return; }
   if (!S.sampleChecked && S.sampleReady) await Promise.race([S.sampleReady, new Promise(r=>setTimeout(r,12000))]);
   if (S.sample && (S.imgLimits || (S.draft.pdfText||"").replace(/\s/g,"").length>40)) await doScan();
+  else if (!S.sample){ S.draft.stage="review"; S.draft.extracted.lines.push({poNo:"",itemCode:"",description:"",qty:null,uom:"",unitPrice:null,amount:null}); render(); }
   else { S.draft.stage="review"; S.draft.error = !S.sample ? "Auto-fill scanner isn't available in this view. Type the details from the invoice." : S.draft.pdfText!=null ? "This PDF is a scanned image with no text, and this view can't read images. Type the details, or ask the supplier for a text PDF." : "This view can't read photos. Type the details, or upload the invoice as a PDF."; render(); }
 }
 async function doScan(){

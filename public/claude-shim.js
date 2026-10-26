@@ -6,7 +6,7 @@
 //   db        -> table public.docs (collection, id, data jsonb) + Realtime
 //   assets    -> Storage bucket "invoice-files"
 //   downloads -> plain browser download
-//   sample    -> Edge Function "scan-invoice" (calls the Claude API server-side)
+//   sample    -> not used: suppliers type invoice details (no AI scanner)
 (() => {
   "use strict";
   const cfg = window.FLEXO_CONFIG || {};
@@ -153,41 +153,6 @@
     },
   };
 
-  // ---------- sample (invoice scanner) ----------
-  const blobToBase64 = (blob) => new Promise((res, rej) => {
-    const r = new FileReader();
-    r.onload = () => res(String(r.result).split(",")[1] || "");
-    r.onerror = () => rej(r.error);
-    r.readAsDataURL(blob);
-  });
-  const MAX_IMAGES = cfg.scanMaxPages || 3;
-  const sample = {
-    async limits() { return { images: { maxCount: MAX_IMAGES } }; },
-    async json(prompt, opts = {}) {
-      const images = [];
-      for (const b of (opts.images || []).slice(0, MAX_IMAGES)) images.push({ media_type: b.type || "image/jpeg", data: await blobToBase64(b) });
-      let res;
-      try {
-        res = await fetch(cfg.supabaseUrl.replace(/\/$/, "") + "/functions/v1/" + (cfg.scanFunction || "scan-invoice"), {
-          method: "POST",
-          headers: { "Content-Type": "application/json", apikey: cfg.supabaseAnonKey, Authorization: "Bearer " + cfg.supabaseAnonKey },
-          body: JSON.stringify({ prompt, images }),
-          signal: opts.signal,
-        });
-      } catch (e) {
-        if (e && e.name === "AbortError") throw err("cancelled");
-        throw err("unavailable", e && e.message);
-      }
-      let body = null;
-      try { body = await res.json(); } catch (e) { /* handled below */ }
-      if (!res.ok || !body || body.error) {
-        const code = (body && body.error && body.error.code) || (res.status === 429 ? "rate_limited" : res.status === 404 ? "sampling_disabled" : "error");
-        throw err(code, body && body.error && body.error.message);
-      }
-      return body.result;
-    },
-  };
-
   // ---------- claude.use ----------
   window.claude = window.claude || {};
   window.claude.use = async (name) => {
@@ -195,7 +160,7 @@
     if (name === "db") return db;
     if (name === "assets") return assets;
     if (name === "downloads") return downloads;
-    if (name === "sample") return cfg.scanEnabled === false ? null : sample;
+    if (name === "sample") return null; // no invoice scanner; suppliers type the details
     throw err("unknown_capability", name);
   };
 })();

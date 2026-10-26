@@ -2,7 +2,6 @@
 # Set these under Settings → Secrets and variables → Actions → Variables:
 #   SUPABASE_URL       https://<project-ref>.supabase.co
 #   SUPABASE_ANON_KEY  the project's anon / publishable key (public by design)
-#   SCAN_ENABLED       "true" once the scan-invoice function is deployed (optional)
 name: Deploy portal to GitHub Pages
 
 on:
@@ -32,7 +31,6 @@ jobs:
         env:
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
-          SCAN_ENABLED: ${{ vars.SCAN_ENABLED }}
         run: |
           if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
             echo "::error::Set the SUPABASE_URL and SUPABASE_ANON_KEY repository variables first."
@@ -42,7 +40,6 @@ jobs:
             const cfg = {
               supabaseUrl: process.env.SUPABASE_URL,
               supabaseAnonKey: process.env.SUPABASE_ANON_KEY,
-              scanEnabled: process.env.SCAN_ENABLED === "true",
             };
             require("fs").writeFileSync("public/config.js", "window.FLEXO_CONFIG = " + JSON.stringify(cfg, null, 2) + ";\n");
           '

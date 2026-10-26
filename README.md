@@ -1,6 +1,6 @@
 # Flexo Supplier Invoice Portal
 
-Suppliers upload their invoices. The portal reads each invoice and checks every line
+Suppliers upload their invoice file and type in its details. The portal checks every line
 against SAP Business One data: the **PO price** and the **GRPO received quantity**
 (a three-way match). An invoice that matches goes straight to the *Ready for payment*
 queue. Anything else is held as an exception for Accounts Payable.
@@ -11,7 +11,6 @@ This repo hosts the portal outside claude.ai for a **temporary pilot**:
 |---|---|
 | Web app (`public/`) | GitHub Pages (static hosting, deployed by GitHub Actions) |
 | Database, realtime updates, file storage | Supabase (Postgres + Realtime + Storage) |
-| Invoice auto-fill scanner (optional) | Supabase Edge Function → Claude API |
 
 `original/Flexo_Supplier_Invoice_Portal.html` is the untouched claude.ai artifact.
 `public/index.html` is the same app with only a few edits: it loads three scripts and
@@ -25,7 +24,7 @@ app to Supabase so the rest of the code stays the same.
 ```mermaid
 flowchart LR
   subgraph Supplier
-    U[Upload PDF / photo] --> R[Review & correct fields] --> S[Submit]
+    U[Upload PDF / photo] --> R[Type invoice details] --> S[Submit]
   end
   subgraph Matching["Matching engine (runs in browser)"]
     S --> M{Each invoice line}
@@ -72,7 +71,7 @@ within tolerance (+25). Then it checks:
 4. **Duplicate**: the same invoice number from the same supplier is put on hold.
 
 Warnings that do **not** block payment: qty × price ≠ line amount, the invoice total doesn't add up
-from the lines + VAT, a different UoM, or low scan confidence.
+from the lines + VAT, or a different UoM.
 
 When new SAP data is imported, open exceptions are re-checked automatically. For example,
 an invoice held for "no GRPO yet" clears by itself once the GRPO is imported.
@@ -108,19 +107,10 @@ Common alternative header names are also accepted (e.g. `PONumber`, `UnitPrice`)
 > repo to **Netlify**, **Vercel** or **Cloudflare Pages** instead. Set publish directory `public`
 > and add a `config.js` there from `public/config.example.js`.
 
-### 3. Optional: invoice auto-fill (Claude)
-Without this step, suppliers type the invoice details by hand. Everything else works.
-```bash
-npm i -g supabase            # or: brew install supabase/tap/supabase
-supabase login
-supabase link --project-ref <project-ref>
-supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
-supabase secrets set ALLOWED_ORIGIN=https://<user>.github.io   # optional: only your site can call it
-supabase functions deploy scan-invoice --no-verify-jwt
-```
-Then add the repository variable `SCAN_ENABLED` = `true` and re-run the deploy workflow.
-The function uses `claude-opus-5-5` by default. You can change this with the `SCAN_MODEL` secret
-(for example `claude-sonnet-5-5` to lower the cost per scan).
+### Invoice entry
+Suppliers type the invoice details (invoice no., date, PO, VAT, total and each line) exactly as
+printed, and attach the invoice file. No AI or paid OCR service is used. Staff can open the
+attached file from the invoice detail to verify what was typed.
 
 ### Local testing
 ```bash
@@ -136,8 +126,6 @@ protection is gone:
 - The staff PIN and supplier access codes are checked **in the browser**. The database policy lets
   anyone who has the anon key (it is inside the page) read and change every row, **including the
   access codes and the PIN**. A technical user could read other suppliers' invoices or approve invoices.
-- If the scanner function is enabled, anyone can call it, which spends your Anthropic credits.
-  Set `ALLOWED_ORIGIN` to limit browser access, and set a spending limit in the Anthropic Console.
 
 Use the pilot with test or low-risk data, and keep the link internal. Before real go-live, change
 sign-in to **Supabase Auth** (staff by email, suppliers by invite). Then replace the

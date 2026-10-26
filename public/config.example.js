@@ -4,6 +4,4 @@
 window.FLEXO_CONFIG = {
   supabaseUrl: "https://YOUR-PROJECT-REF.supabase.co",
   supabaseAnonKey: "YOUR-ANON-KEY",
-  // Set to true after deploying supabase/functions/scan-invoice (needs an Anthropic API key).
-  scanEnabled: false,
 };
