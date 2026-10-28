@@ -66,11 +66,15 @@ const acctPill = st => { const x = ACCT[st] || ACCT.pending; return `<span class
 
 // ---------- boot ----------
 async function boot() {
-  if (!cfg.supabaseUrl || !cfg.supabaseAnonKey || !window.supabase) {
+  // Use only https://<ref>.supabase.co — ignore any extra path (e.g. "/rest/v1/") or spaces pasted with it.
+  let baseUrl = null;
+  try { baseUrl = new URL(String(cfg.supabaseUrl || "").trim()).origin; } catch (e) {}
+  const anonKey = String(cfg.supabaseAnonKey || "").trim();
+  if (!baseUrl || !anonKey || !window.supabase) {
     $("#app").innerHTML = `<div class="auth panel"><div class="panel-b"><h2>Portal unavailable</h2><p class="muted">The portal can't reach its database. IT: check config.js (Supabase URL and anon key).</p></div></div>`;
     return;
   }
-  S.sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
+  S.sb = window.supabase.createClient(baseUrl, anonKey);
   S.sb.auth.onAuthStateChange((event, session) => {
     if (event === "PASSWORD_RECOVERY") S.recovering = true;
     const changed = (session?.user?.id || null) !== (S.session?.user?.id || null);
