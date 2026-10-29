@@ -42,6 +42,12 @@ alter table public.profiles add column if not exists requested_role text not nul
 alter table public.profiles drop constraint if exists profiles_requested_role_check;
 alter table public.profiles add  constraint profiles_requested_role_check check (requested_role in ('supplier', 'staff'));
 
+-- Only Flexo email accounts can ever be staff or admin (whoever changes the role).
+-- NOT VALID: applies to every change from now on without failing on older test rows.
+alter table public.profiles drop constraint if exists staff_needs_flexo_email;
+alter table public.profiles add  constraint staff_needs_flexo_email
+  check (role = 'supplier' or lower(email) like '%@flexo.com.ph') not valid;
+
 -- Helper checks used by the policies (security definer so they can read profiles).
 -- Staff powers need a strong login: password + authenticator code (aal2), or
 -- "Sign in with Microsoft 365" (amr method 'oauth' — Azure is the only OAuth provider

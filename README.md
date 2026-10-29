@@ -119,8 +119,11 @@ anything.
 
 | How staff sign in | What they need |
 |---|---|
-| **Sign in with Microsoft 365** | Their Flexo work account. Microsoft applies Flexo's own sign-in protection |
 | Email + password | Plus a **6-digit code** from Microsoft or Google Authenticator. The portal walks them through setup (QR code) the first time |
+| *Sign in with Microsoft 365* | *Parked: not set up. The button stays hidden until the optional steps below are done* |
+
+Only **@flexo.com.ph** accounts can be staff or admin. Staff sign-up only accepts Flexo emails, and the
+database refuses to give the staff or admin role to any other email, even from the SQL Editor.
 
 ⚠️ Microsoft sign-in counts as strong only if **Microsoft 365 itself requires two-step sign-in** (MFA,
 Security defaults or Conditional Access). Ask IT to confirm this is on for all staff.
@@ -131,7 +134,7 @@ new code at their next sign-in:
 delete from auth.mfa_factors where user_id = (select id from auth.users where email = 'name@flexo.com.ph');
 ```
 
-**Set up "Sign in with Microsoft 365" (IT, one time):**
+**Optional, parked for now: set up "Sign in with Microsoft 365" (IT, one time).**
 1. **Azure portal → Microsoft Entra ID → App registrations → New registration**
    - Name: `Flexo Supplier Portal – staff sign-in`
    - Accounts: **this organizational directory only** (single tenant)
