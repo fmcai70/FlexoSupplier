@@ -383,3 +383,95 @@ begin
     execute 'revoke execute on function public.doc_merge(text,text,jsonb) from public, anon, authenticated';
   end if;
 end $$;
+
+-- ---------------------------------------------------------------------------
+-- Email notifications (v2.2)
+-- Every event that should send an email is queued here by a trigger. The
+-- "notify" Edge Function sends the queue through Microsoft Graph and marks
+-- each row sent. Nobody using the portal can read or change this table.
+-- ---------------------------------------------------------------------------
+create table if not exists public.notifications (
+  id          bigserial primary key,
+  kind        text not null,       -- signup | account_approved | account_rejected | invoice_submitted
+                                   -- invoice_returned | invoice_scheduled | invoice_rescheduled | invoice_paid
+  invoice_id  uuid references public.invoices (id) on delete cascade,
+  profile_id  uuid references public.profiles (id) on delete cascade,
+  created_at  timestamptz not null default now(),
+  claimed_at  timestamptz,
+  sent_at     timestamptz,
+  attempts    int not null default 0,
+  last_error  text
+);
+create index if not exists notifications_pending_idx on public.notifications (id) where sent_at is null;
+alter table public.notifications enable row level security;   -- no policies: closed to portal users
+revoke all on public.notifications from anon, authenticated;
+
+create or replace function public.queue_notifications() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if tg_table_name = 'profiles' then
+    if tg_op = 'INSERT' and new.role = 'supplier' then
+      insert into public.notifications (kind, profile_id) values ('signup', new.id);
+    elsif tg_op = 'UPDATE' and new.role = 'supplier' and new.status is distinct from old.status
+          and new.status in ('approved', 'rejected') then
+      insert into public.notifications (kind, profile_id) values ('account_' || new.status, new.id);
+    end if;
+  else
+    if tg_op = 'INSERT' then
+      insert into public.notifications (kind, invoice_id) values ('invoice_submitted', new.id);
+    elsif new.status is distinct from old.status and new.status in ('returned', 'scheduled', 'paid') then
+      insert into public.notifications (kind, invoice_id) values ('invoice_' || new.status, new.id);
+    elsif new.status = 'scheduled' and old.status = 'scheduled'
+          and (new.release_date, new.release_amount) is distinct from (old.release_date, old.release_amount) then
+      insert into public.notifications (kind, invoice_id) values ('invoice_rescheduled', new.id);
+    end if;
+  end if;
+  return null;
+end $$;
+
+drop trigger if exists profiles_notify on public.profiles;
+create trigger profiles_notify after insert or update on public.profiles
+  for each row execute function public.queue_notifications();
+drop trigger if exists invoices_notify on public.invoices;
+create trigger invoices_notify after insert or update on public.invoices
+  for each row execute function public.queue_notifications();
+
+-- Used only by the notify Edge Function (service role): take up to p_limit
+-- unsent emails (retrying failed ones up to 5 times) together with the data to write them.
+create or replace function public.claim_notifications(p_limit int default 25) returns setof jsonb
+language sql security definer set search_path = public as $$
+  with c as (
+    update public.notifications n
+       set claimed_at = now(), attempts = n.attempts + 1
+     where n.id in (select id from public.notifications
+                     where sent_at is null and attempts < 5
+                       and (claimed_at is null or claimed_at < now() - interval '10 minutes')
+                     order by id limit p_limit
+                     for update skip locked)
+    returning n.*
+  )
+  select jsonb_build_object('id', c.id, 'kind', c.kind,
+                            'invoice', to_jsonb(i), 'profile', to_jsonb(p))
+    from c
+    left join public.invoices i on i.id = c.invoice_id
+    left join public.profiles p on p.id = coalesce(c.profile_id, i.supplier_id)
+   order by c.id;
+$$;
+create or replace function public.finish_notification(p_id bigint, p_error text default null) returns void
+language sql security definer set search_path = public as $$
+  update public.notifications
+     set sent_at = case when p_error is null then now() end,
+         claimed_at = null,
+         last_error = p_error
+   where id = p_id;
+$$;
+revoke execute on function public.claim_notifications(int) from public, anon, authenticated;
+revoke execute on function public.finish_notification(bigint, text) from public, anon, authenticated;
+do $$ begin
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    execute 'grant execute on function public.claim_notifications(int) to service_role';
+    execute 'grant execute on function public.finish_notification(bigint, text) to service_role';
+    execute 'grant select, update on public.notifications to service_role';
+  end if;
+end $$;
+revoke execute on function public.queue_notifications() from public, anon, authenticated;

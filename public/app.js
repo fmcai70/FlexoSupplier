@@ -37,6 +37,15 @@ function toast(msg) {
   r.innerHTML = `<div class="toast" role="status">${esc(msg)}</div>`;
   clearTimeout(toast.t); toast.t = setTimeout(() => (r.innerHTML = ""), 3600);
 }
+// Ask the "notify" Edge Function to send queued emails now. It only sends what the
+// database already queued, so extra calls are harmless; if it isn't deployed, nothing happens.
+function sendEmails() {
+  clearTimeout(sendEmails.t);
+  sendEmails.t = setTimeout(() => {
+    if (!S.base) return;
+    fetch(S.base + "/functions/v1/notify", { method: "POST", headers: { apikey: S.key, Authorization: "Bearer " + (S.session?.access_token || S.key), "Content-Type": "application/json" }, body: "{}" }).catch(() => {});
+  }, 600);
+}
 function friendly(err) {
   const m = (err && (err.message || err.error_description)) || String(err || "");
   if (/invalid login credentials/i.test(m)) return "Wrong email or password.";
@@ -76,6 +85,7 @@ async function boot() {
     return;
   }
   S.sb = window.supabase.createClient(baseUrl, anonKey);
+  S.base = baseUrl; S.key = anonKey;
   S.sb.auth.onAuthStateChange((event, session) => {
     if (event === "PASSWORD_RECOVERY") S.recovering = true;
     const changed = (session?.user?.id || null) !== (S.session?.user?.id || null);
@@ -96,7 +106,7 @@ async function loadProfile() {
   }
   render();
   if (isSupplier() || isStaff()) loadInvoices();
-  if (isStaff()) loadProfiles();
+  if (isStaff()) { loadProfiles(); sendEmails(); }
 }
 async function loadInvoices() {
   const { data, error } = await S.sb.from("invoices").select("*").order("created_at", { ascending: false }).limit(2000);
@@ -204,6 +214,7 @@ function bindAuth() {
         });
         if (error) return err(friendly(error));
         if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) return err(friendly({ message: "already registered" }));
+        sendEmails();
         if (!data.session) ok("Account created. If you receive a confirmation email, click its link, then sign in. Flexo Accounting will review your account.");
       } else {
         if (!v("fp-email")) return err("Enter your email.");
@@ -328,7 +339,7 @@ async function submitInvoice(e) {
     if (up.error) throw up.error;
     const { data, error } = await S.sb.from("invoices").insert(Object.assign({}, out, { file_path: path, file_name: file.name })).select().single();
     if (error) { await S.sb.storage.from(BUCKET).remove([path]); throw error; }
-    S.lastSubmitted = data; S.invoices.unshift(data); render();
+    S.lastSubmitted = data; S.invoices.unshift(data); render(); sendEmails();
   } catch (err) {
     errEl.textContent = friendly(err); errEl.hidden = false;
     if (btn.isConnected) { btn.disabled = false; btn.textContent = "Submit to Flexo"; }
@@ -439,7 +450,7 @@ async function bulkSchedule() {
     if (error) failed.push(inv.invoice_no); else { ok++; Object.assign(inv, data); S.sel.delete(id); }
   }
   toast(`${ok} invoice${ok === 1 ? "" : "s"} scheduled for ${fmtFri(fri)}` + (failed.length ? ` · failed: ${failed.join(", ")}` : ""));
-  render();
+  render(); if (ok) sendEmails();
 }
 function exportCSV() {
   const rows = queueRows();
@@ -530,7 +541,7 @@ function bindDrawerActions(inv) {
     const { data, error } = await S.sb.from("invoices").update(patch).eq("id", inv.id).select().single();
     if (error) { toast(friendly(error)); return false; }
     const k = S.invoices.findIndex(i => i.id === inv.id); if (k >= 0) S.invoices[k] = data;
-    toast(msg); render(); return true;
+    toast(msg); render(); sendEmails(); return true;
   };
   const confirmBox = (html, onOk, okLabel = "Confirm") => {
     act.innerHTML = `<div class="inline-conf">${html}<button class="btn primary" id="c-ok">${okLabel}</button><button class="btn ghost" id="c-cancel">Cancel</button></div>`;
@@ -619,7 +630,7 @@ async function accountAction(tr, what) {
   const { data, error } = await S.sb.from("profiles").update(patch).eq("id", p.id).select().single();
   if (error) return toast(friendly(error));
   const k = S.profiles.findIndex(x => x.id === p.id); if (k >= 0) S.profiles[k] = data;
-  toast({ approve: "Account approved", reject: "Account rejected", disable: "Account disabled", save: "Saved" }[what]); render();
+  toast({ approve: "Account approved", reject: "Account rejected", disable: "Account disabled", save: "Saved" }[what]); render(); sendEmails();
 }
 
 // ---------- event binding ----------

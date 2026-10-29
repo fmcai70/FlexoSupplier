@@ -94,8 +94,7 @@ that nobody can edit.
      Nothing is deleted. You can remove that table later with `drop table public.docs;`.
 2. Go to **Authentication → Sign In / Providers → Email**:
    - Keep **Email** enabled.
-   - **Turn OFF "Confirm email"** for now (see the email note below). Flexo's own approval step
-     already confirms who each supplier is.
+   - **Turn OFF "Confirm email"**. Flexo's approval step already confirms who each supplier is.
 3. Go to **Authentication → URL Configuration**:
    - Set **Site URL** to `https://fmcai70.github.io/FlexoSupplier/`.
    - Add the same address under **Redirect URLs**.
@@ -121,12 +120,50 @@ This is already set up: the `SUPABASE_URL` and `SUPABASE_ANON_KEY` repository va
 source set to GitHub Actions, and the `github-pages` environment allowing `main`. Every push to
 `main` redeploys the site.
 
-### ✉️ Email (sign-up confirmation and password reset)
-Supabase's built-in email only delivers to members of your Supabase team, so suppliers wouldn't
-receive confirmation or "forgot password" emails. That's why "Confirm email" is off above. To turn
-on password-reset emails for suppliers, add your own email sender under
-**Authentication → Emails → SMTP Settings**. Your company Microsoft 365 mailbox, or a service such
-as Brevo or Resend, will work. Until that is set up, password resets can't reach suppliers, so set up SMTP before inviting many suppliers.
+### ✉️ Email notifications (Microsoft 365 via Graph)
+| Email | Sent to |
+|---|---|
+| New supplier sign-up (approval needed) | AP mailbox |
+| New invoice submitted | AP mailbox |
+| Account approved / rejected | Supplier |
+| Invoice returned (with reason) | Supplier |
+| Payment scheduled / schedule changed (Friday + amount) | Supplier |
+| Invoice paid (date, check no., proof in portal) | Supplier |
+| Password reset | Supplier (from "Forgot password") |
+
+Each event is put in an email queue in the database (`notifications`). The **notify** function sends
+the queue through your Microsoft Graph app, and failed emails are retried. Password-reset emails go
+through the **send-auth-email** function, using Supabase's "Send Email" hook.
+
+**One-time setup.** Use the same Graph app as your other Supabase project. It needs the **Mail.Send**
+*application* permission and must be allowed to send as `MAIL_SENDER`.
+
+1. Run the latest `supabase/schema.sql` in the SQL Editor.
+2. **Edge Functions → Secrets**: add the following. Copy the Graph values from your other project and type
+   them yourself. Never paste them into chat or into code.
+   | Name | Value |
+   |---|---|
+   | `MS_TENANT_ID` | Microsoft 365 tenant ID |
+   | `MS_CLIENT_ID` | Graph app (client) ID |
+   | `MS_CLIENT_SECRET` | Graph app client secret |
+   | `MAIL_SENDER` | Mailbox the emails come from, e.g. `ap-portal@flexo.com.ph` |
+   | `AP_EMAIL` | Accounting's shared mailbox |
+   | `PORTAL_URL` | `https://fmcai70.github.io/FlexoSupplier/` |
+3. **Edge Functions → Deploy a new function → Via Editor**. Do this twice:
+   - Name `notify`: paste `supabase/functions/notify/index.ts` and deploy.
+   - Name `send-auth-email`: paste `supabase/functions/send-auth-email/index.ts` and deploy.
+     Then open its **Details** and turn **OFF "Verify JWT"** (Enforce JWT verification).
+4. **Authentication → Auth Hooks → Add hook → Send Email hook**: choose **HTTPS**. Set the URL to
+   `https://<project-ref>.supabase.co/functions/v1/send-auth-email`, click **Generate secret**, and save.
+   Copy that secret (it starts with `v1,whsec_`) into a new Edge Function secret named
+   `SEND_EMAIL_HOOK_SECRET`.
+5. Test it: use **Forgot password** on the portal with your own email, and approve a test supplier.
+   If an email doesn't arrive, look in **Edge Functions → notify / send-auth-email → Logs**. In the
+   SQL Editor, `select kind, attempts, last_error from notifications order by id desc limit 20;` shows
+   the error for each queued email.
+
+With CLI instead of the dashboard: `supabase functions deploy notify` and
+`supabase functions deploy send-auth-email --no-verify-jwt`.
 
 ### Local testing
 ```bash
@@ -140,6 +177,8 @@ npx http-server public -p 8080                 # open http://localhost:8080
 | Path | What it is |
 |---|---|
 | `public/index.html`, `public/app.js`, `public/styles.css` | The portal |
-| `supabase/schema.sql` | Tables, security rules, file storage, history log |
+| `supabase/schema.sql` | Tables, security rules, file storage, history log, email queue |
+| `supabase/functions/notify` | Sends queued emails through Microsoft Graph |
+| `supabase/functions/send-auth-email` | Password-reset emails through Microsoft Graph (Send Email hook) |
 | `.github/workflows/deploy-pages.yml` | Publishes `public/` to GitHub Pages |
 | `sap/*.sql` | SAP B1 export queries for POs and GRPOs. **Not used** by this version, which has no automatic matching. Kept for later |
