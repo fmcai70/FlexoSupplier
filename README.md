@@ -97,21 +97,35 @@ that nobody can edit.
    - **Turn OFF "Confirm email"**. Flexo's approval step already confirms who each supplier is.
 3. Go to **Authentication → URL Configuration**:
    - Set **Site URL** to `https://fmcai70.github.io/FlexoSupplier/`.
-   - Add the same address under **Redirect URLs**.
+   - Under **Redirect URLs**, add `https://fmcai70.github.io/FlexoSupplier/**`. The `**` covers both the
+     supplier page and the staff page, so password-reset links return to the right one.
+
+### Two sign-in pages
+| Who | Link | What's there |
+|---|---|---|
+| Suppliers | `https://fmcai70.github.io/FlexoSupplier/` | Sign in, supplier **Sign up**, Forgot password |
+| Flexo staff | `https://fmcai70.github.io/FlexoSupplier/staff/` | Sign in, **Request access** (only `@flexo.com.ph` emails), Forgot password |
+
+- Staff or admin who open the supplier page are sent to the staff page automatically.
+- A supplier who signs in on the staff page is told to use the supplier portal.
+- Asking for staff access grants nothing by itself. The database only records "staff request" for
+  `@flexo.com.ph` emails, and an admin must still approve it.
+- Share the staff link only inside Flexo. Search engines are asked not to list it.
 
 ### 2. Create the first admin
-1. Open the portal and **Sign up** with your own Flexo email.
+1. Open the **staff page** and choose **Request access** with your own Flexo email. You can also
+   use any account that already exists.
 2. In the Supabase **SQL Editor**, run this with your own email:
    ```sql
    update public.profiles set role = 'admin', status = 'approved' where email = 'your.name@flexo.com.ph';
    ```
-3. Sign out of the portal and sign in again. You'll see the **Invoices** and **Supplier accounts** tabs.
+3. Sign out and sign in again on the staff page. You'll see the **Invoices** and **Accounts** tabs.
 
-Other staff sign up the same way. An admin then sets their **Role** to `staff` and clicks **Approve**
-under **Supplier accounts**.
+Other staff choose **Request access** on the staff page. An admin approves them under **Accounts**; the
+role is already set to `staff` for these requests.
 
 ### 3. Approve suppliers
-Go to **Supplier accounts → Pending approval**. Check the company name, TIN and contact, then
+Go to **Accounts → Pending approval**. Check the company name, TIN and contact, then
 type the supplier's **SAP vendor code** (CardCode) and click **Approve**. To refuse an account,
 click **Reject** and give a reason, which the applicant will see.
 
@@ -176,7 +190,8 @@ npx http-server public -p 8080                 # open http://localhost:8080
 ## Files
 | Path | What it is |
 |---|---|
-| `public/index.html`, `public/app.js`, `public/styles.css` | The portal |
+| `public/index.html`, `public/app.js`, `public/styles.css` | The portal (supplier page) |
+| `public/staff/index.html` | Staff sign-in page (same app in staff mode) |
 | `supabase/schema.sql` | Tables, security rules, file storage, history log, email queue |
 | `supabase/functions/notify` | Sends queued emails through Microsoft Graph |
 | `supabase/functions/send-auth-email` | Password-reset emails through Microsoft Graph (Send Email hook) |

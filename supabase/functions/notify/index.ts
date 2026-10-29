@@ -12,7 +12,8 @@
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 
 const env = (k: string) => Deno.env.get(k) ?? "";
-const PORTAL_URL = env("PORTAL_URL") || "https://fmcai70.github.io/FlexoSupplier/";
+const PORTAL_URL = (env("PORTAL_URL") || "https://fmcai70.github.io/FlexoSupplier/").replace(/\/?$/, "/");
+const STAFF_URL = PORTAL_URL + "staff/";
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info",
@@ -54,13 +55,13 @@ async function sendMail(to: string, subject: string, html: string) {
 const esc = (v: unknown) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 const peso = (v: unknown) => "₱ " + Number(v ?? 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const day = (s: unknown, weekday = false) => s ? new Date(String(s).slice(0, 10) + "T00:00:00Z").toLocaleDateString("en-PH", { timeZone: "UTC", year: "numeric", month: "short", day: "numeric", ...(weekday ? { weekday: "long" as const } : {}) }) : "—";
-function layout(title: string, intro: string, rows: [string, string][], button: string, footer = "") {
+function layout(title: string, intro: string, rows: [string, string][], button: string, footer = "", url = PORTAL_URL) {
   return `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#15232B;max-width:560px">
   <div style="border-bottom:3px solid #0E6B5C;padding:8px 0 10px;margin-bottom:16px"><b style="color:#0E6B5C">Flexo Manufacturing Corporation</b> · Supplier Invoice Portal</div>
   <h2 style="font-size:18px;margin:0 0 8px">${esc(title)}</h2>
   <p style="margin:0 0 14px">${intro}</p>
   ${rows.length ? `<table style="border-collapse:collapse;margin:0 0 16px">${rows.map(([k, v]) => `<tr><td style="padding:4px 16px 4px 0;color:#6B7A80">${esc(k)}</td><td style="padding:4px 0"><b>${v}</b></td></tr>`).join("")}</table>` : ""}
-  <p style="margin:0 0 16px"><a href="${esc(PORTAL_URL)}" style="background:#0E6B5C;color:#fff;text-decoration:none;padding:9px 16px;border-radius:6px;display:inline-block">${esc(button)}</a></p>
+  <p style="margin:0 0 16px"><a href="${esc(url)}" style="background:#0E6B5C;color:#fff;text-decoration:none;padding:9px 16px;border-radius:6px;display:inline-block">${esc(button)}</a></p>
   ${footer ? `<p style="margin:0 0 8px">${footer}</p>` : ""}
   <p style="color:#6B7A80;font-size:12px;margin:16px 0 0">This is an automatic message from the Flexo Supplier Invoice Portal. Please do not reply.</p></div>`;
 }
@@ -71,9 +72,13 @@ export function compose(n: Row): { to: string; subject: string; html: string } |
   const ap = env("AP_EMAIL");
   switch (n.kind) {
     case "signup":
-      return ap ? { to: ap, subject: `New supplier sign-up: ${p.company_name}`, html: layout("New supplier sign-up — approval needed",
-        "A supplier signed up on the portal and is waiting for approval. Check the details, then approve the account with the supplier's SAP vendor code under <b>Supplier accounts</b>.",
-        [["Company", esc(p.company_name)], ["TIN", esc(p.tin)], ["Contact", esc(p.contact_name)], ["Email", esc(p.email)], ["Phone", esc(p.phone)]], "Open Supplier accounts") } : null;
+      if (!ap) return null;
+      if (p.requested_role === "staff") return { to: ap, subject: `Staff access request: ${p.contact_name || p.email}`, html: layout("Staff access request — admin approval needed",
+        "Someone asked for Flexo staff access to the supplier invoice portal. An admin can approve it under <b>Accounts</b> (role: staff).",
+        [["Name", esc(p.contact_name)], ["Email", esc(p.email)]], "Open the staff portal", "", STAFF_URL) };
+      return { to: ap, subject: `New supplier sign-up: ${p.company_name}`, html: layout("New supplier sign-up — approval needed",
+        "A supplier signed up on the portal and is waiting for approval. Check the details, then approve the account with the supplier's SAP vendor code under <b>Accounts</b>.",
+        [["Company", esc(p.company_name)], ["TIN", esc(p.tin)], ["Contact", esc(p.contact_name)], ["Email", esc(p.email)], ["Phone", esc(p.phone)]], "Open Accounts", "", STAFF_URL) };
     case "account_approved":
       return { to: p.email, subject: "Your Flexo supplier portal account is approved", html: layout("Your account is approved",
         `Hello ${esc(p.contact_name || p.company_name)}, your account for <b>${esc(p.company_name)}</b> has been approved. You can now submit your invoices to Flexo online.`,
@@ -85,7 +90,7 @@ export function compose(n: Row): { to: string; subject: string; html: string } |
     case "invoice_submitted":
       return ap ? { to: ap, subject: `New invoice ${i.invoice_no} from ${i.company_name}`, html: layout("New invoice submitted",
         `<b>${esc(i.company_name)}</b> (${esc(i.vendor_code)}) submitted an invoice for review.`,
-        [...inv, ["VAT-exclusive", peso(i.vatex_amount)]], "Review in the portal") } : null;
+        [...inv, ["VAT-exclusive", peso(i.vatex_amount)]], "Review in the staff portal", "", STAFF_URL) } : null;
     case "invoice_returned":
       return { to: p.email, subject: `Invoice ${i.invoice_no} was returned — action needed`, html: layout("Your invoice was returned",
         `Flexo Accounting returned invoice <b>${esc(i.invoice_no)}</b>. Please correct it and submit it again in the portal.`,

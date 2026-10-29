@@ -36,6 +36,12 @@ create table if not exists public.profiles (
     check (role <> 'supplier' or status <> 'approved' or coalesce(trim(vendor_code), '') <> '')
 );
 
+-- What the person asked for when signing up. 'staff' only from the staff page AND only
+-- for @flexo.com.ph emails. It grants nothing by itself: an admin still sets the role.
+alter table public.profiles add column if not exists requested_role text not null default 'supplier';
+alter table public.profiles drop constraint if exists profiles_requested_role_check;
+alter table public.profiles add  constraint profiles_requested_role_check check (requested_role in ('supplier', 'staff'));
+
 -- Helper checks used by the policies (security definer so they can read profiles).
 create or replace function public.is_staff() returns boolean
 language sql stable security definer set search_path = public as $$
@@ -66,14 +72,16 @@ $$;
 create or replace function public.handle_new_user() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
-  insert into public.profiles (id, email, company_name, tin, contact_name, phone)
+  insert into public.profiles (id, email, company_name, tin, contact_name, phone, requested_role)
   values (
     new.id,
     coalesce(new.email, ''),
     left(coalesce(new.raw_user_meta_data ->> 'company_name', ''), 200),
     left(coalesce(new.raw_user_meta_data ->> 'tin', ''), 40),
     left(coalesce(new.raw_user_meta_data ->> 'contact_name', ''), 120),
-    left(coalesce(new.raw_user_meta_data ->> 'phone', ''), 40)
+    left(coalesce(new.raw_user_meta_data ->> 'phone', ''), 40),
+    case when new.raw_user_meta_data ->> 'requested_role' = 'staff'
+          and lower(coalesce(new.email, '')) like '%@flexo.com.ph' then 'staff' else 'supplier' end
   )
   on conflict (id) do nothing;
   return new;
@@ -93,6 +101,7 @@ begin
   new.id := old.id;
   new.email := old.email;
   new.created_at := old.created_at;
+  new.requested_role := old.requested_role;
   if not public.is_staff() then
     -- Users may only edit their own contact details.
     new.role := old.role; new.status := old.status; new.vendor_code := old.vendor_code;

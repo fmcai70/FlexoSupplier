@@ -10,7 +10,12 @@ const cfg = window.FLEXO_CONFIG || {};
 const BUCKET = "invoice-files";
 const MAX_FILE = 10 * 1024 * 1024;
 const FILE_TYPES = ["application/pdf", "image/jpeg", "image/png"];
-const SITE_URL = location.origin + location.pathname;
+// Two sign-in pages share this code: suppliers at the site root, Flexo staff at /staff/.
+const MODE = window.PORTAL_MODE === "staff" ? "staff" : "supplier";
+const STAFF_DOMAIN = "@flexo.com.ph";
+const SUPPLIER_URL = new URL(MODE === "staff" ? "../" : "./", location.href).href;
+const STAFF_URL = new URL(MODE === "staff" ? "./" : "staff/", location.href).href;
+const SITE_URL = MODE === "staff" ? STAFF_URL : SUPPLIER_URL; // where email links return to
 
 const S = {
   sb: null, session: null, profile: null, recovering: false,
@@ -126,8 +131,12 @@ function render() {
   if (S.recovering && S.session) { renderTabs([]); app.innerHTML = resetView(); bindReset(); return; }
   if (!S.session) { renderTabs([]); app.innerHTML = authView(); bindAuth(); renderDrawer(); return; }
   if (!S.profile) { renderTabs([]); app.innerHTML = `<div class="empty" style="padding-top:80px"><div class="spinner" style="margin:0 auto 10px"></div>Loading your account…</div>`; return; }
+  const p = S.profile;
+  const staffRequest = p.role === "supplier" && p.requested_role === "staff" && p.status !== "approved";
+  if (MODE === "supplier" && (isStaff() || staffRequest)) { location.replace(STAFF_URL); return; }
+  if (MODE === "staff" && !isStaff() && !staffRequest) { renderTabs([]); app.innerHTML = wrongPageView(); bindWrongPage(); return; }
   if (!isSupplier() && !isStaff()) { renderTabs([]); app.innerHTML = notApprovedView(); bindNotApproved(); return; }
-  const tabs = isStaff() ? [["invoices", "Invoices"], ["accounts", "Supplier accounts"]] : [["submit", "Submit invoice"], ["mine", "My invoices"]];
+  const tabs = isStaff() ? [["invoices", "Invoices"], ["accounts", "Accounts"]] : [["submit", "Submit invoice"], ["mine", "My invoices"]];
   if (!S.tab || !tabs.some(t => t[0] === S.tab)) S.tab = tabs[0][0];
   renderTabs(tabs);
   const keep = document.activeElement?.id; const caret = document.activeElement?.selectionStart;
@@ -158,6 +167,7 @@ function authView() {
   const m = S.authMode;
   const f = (id, label, type = "text", extra = "") => `<div class="field"><label for="${id}">${label} <span class="req">*</span></label><input class="input" id="${id}" type="${type}" ${extra}></div>`;
   let body = "";
+  if (MODE === "staff") return staffAuthView(f);
   if (m === "signin") body = `
     ${f("au-email", "Email", "email", 'autocomplete="email"')}
     ${f("au-pass", "Password", "password", 'autocomplete="current-password"')}
@@ -188,6 +198,42 @@ function authView() {
       <div class="note ok" id="au-ok" hidden></div>
     </div></div>`;
 }
+function staffAuthView(f) {
+  const m = S.authMode === "signup" ? "request" : S.authMode;
+  let body = "";
+  if (m === "signin") body = `
+    ${f("au-email", "Flexo email", "email", 'autocomplete="email"')}
+    ${f("au-pass", "Password", "password", 'autocomplete="current-password"')}
+    <button class="btn primary" id="au-go">Sign in</button>`;
+  else if (m === "request") body = `
+    ${f("rq-name", "Full name", "text", 'autocomplete="name"')}
+    ${f("rq-email", "Flexo email", "email", `autocomplete="email" placeholder="name${STAFF_DOMAIN}"`)}
+    <div class="grid g2">${f("rq-pass", "Password (min. 8)", "password", 'autocomplete="new-password"')}${f("rq-pass2", "Confirm password", "password", 'autocomplete="new-password"')}</div>
+    <button class="btn primary" id="au-go">Request access</button>
+    <p class="small muted">Only ${STAFF_DOMAIN} emails. An admin approves each request before you can use the staff portal.</p>`;
+  else body = `
+    ${f("fp-email", "Flexo email", "email", 'autocomplete="email"')}
+    <button class="btn primary" id="au-go">Send reset link</button>`;
+  return `<div class="auth panel">
+    <div class="panel-h"><h2>${m === "request" ? "Request staff access" : m === "forgot" ? "Reset password" : "Flexo staff sign in"}</h2><span class="pill p-approved">Staff only</span></div>
+    <div class="panel-b">
+      <div class="seg3" role="group" aria-label="Choose">
+        <button data-mode="signin" aria-pressed="${m === "signin"}">Sign in</button>
+        <button data-mode="request" aria-pressed="${m === "request"}">Request access</button>
+        <button data-mode="forgot" aria-pressed="${m === "forgot"}">Forgot password</button>
+      </div>
+      ${body}
+      <p class="err" id="au-err" hidden></p>
+      <div class="note ok" id="au-ok" hidden></div>
+      <p class="small muted" style="margin:0">Supplier? <a href="${esc(SUPPLIER_URL)}">Go to the supplier portal</a></p>
+    </div></div>`;
+}
+function wrongPageView() {
+  return `<div class="auth panel"><div class="panel-h"><h2>This page is for Flexo staff</h2></div><div class="panel-b">
+    <p class="muted" style="margin:0">You're signed in with a supplier account. Suppliers use the supplier portal.</p>
+    <div class="row"><a class="btn primary" href="${esc(SUPPLIER_URL)}">Go to the supplier portal</a><button class="btn" id="wp-out">Sign out</button></div></div></div>`;
+}
+function bindWrongPage() { $("#wp-out").onclick = () => $("#logout").click(); }
 function bindAuth() {
   $$("[data-mode]").forEach(b => (b.onclick = () => { S.authMode = b.dataset.mode; render(); }));
   const err = m => { const e = $("#au-err"); e.textContent = m; e.hidden = !m; };
@@ -201,6 +247,19 @@ function bindAuth() {
         if (!v("au-email") || !$("#au-pass").value) return err("Enter your email and password.");
         const { error } = await S.sb.auth.signInWithPassword({ email: v("au-email"), password: $("#au-pass").value });
         if (error) return err(friendly(error));
+      } else if (S.authMode === "request") {
+        if (!v("rq-name") || !v("rq-email")) return err("Enter your full name and Flexo email.");
+        if (!v("rq-email").toLowerCase().endsWith(STAFF_DOMAIN)) return err(`Use your Flexo email (ending in ${STAFF_DOMAIN}).`);
+        if ($("#rq-pass").value.length < 8) return err("Password must be at least 8 characters.");
+        if ($("#rq-pass").value !== $("#rq-pass2").value) return err("The two passwords don't match.");
+        const { data, error } = await S.sb.auth.signUp({
+          email: v("rq-email"), password: $("#rq-pass").value,
+          options: { emailRedirectTo: SITE_URL, data: { company_name: "Flexo Manufacturing Corporation", contact_name: v("rq-name"), requested_role: "staff" } },
+        });
+        if (error) return err(friendly(error));
+        if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) return err(friendly({ message: "already registered" }));
+        sendEmails();
+        if (!data.session) ok("Request sent. Sign in once an admin has approved it.");
       } else if (S.authMode === "signup") {
         const need = { "su-company": "company name", "su-tin": "TIN", "su-phone": "phone", "su-contact": "contact person", "su-email": "email" };
         const miss = Object.keys(need).filter(k => !v(k));
@@ -245,6 +304,13 @@ function bindReset() {
 }
 function notApprovedView() {
   const p = S.profile;
+  if (MODE === "staff") {
+    const t = { pending: ["Staff access requested", "An admin will review your request. Once approved, sign in again (or click Check again) to open the staff portal."], rejected: ["Staff access not approved", "An admin did not approve this request."], disabled: ["Access disabled", "This account has been disabled by an admin."] }[p.status] || ["Access not active", ""];
+    return `<div class="auth panel"><div class="panel-h"><h2>${t[0]}</h2>${acctPill(p.status)}</div><div class="panel-b">
+      <p class="muted" style="margin:0">${t[1]}</p>${p.status_note ? `<div class="note warn">Reason: ${esc(p.status_note)}</div>` : ""}
+      <dl class="kv" style="margin:0"><div><dt>Name</dt><dd>${esc(p.contact_name)}</dd></div><div><dt>Email</dt><dd>${esc(p.email)}</dd></div><div><dt>Requested</dt><dd>${fmtDT(p.created_at)}</dd></div></dl>
+      <div class="row"><button class="btn" id="na-refresh">Check again</button></div></div></div>`;
+  }
   const msg = {
     pending: ["Account awaiting approval", "Thank you for signing up. Flexo Accounting is checking your details and will link your account to your supplier record. You can submit invoices once your account is approved."],
     rejected: ["Account not approved", "Flexo Accounting could not approve this account."],
@@ -590,7 +656,7 @@ function accountsView() {
   const groups = { pending: p => p.status === "pending", approved: p => p.status === "approved", inactive: p => ["rejected", "disabled"].includes(p.status), all: () => true };
   const labels = { pending: "Pending approval", approved: "Approved", inactive: "Rejected / disabled", all: "All" };
   const rows = all.filter(groups[S.acctFilter]);
-  const canEdit = p => isAdmin() || (p.role === "supplier");
+  const canEdit = p => isAdmin() || (p.role === "supplier" && p.requested_role !== "staff");
   return `<div class="chips">${Object.keys(groups).map(k => `<button class="chip" data-acct="${k}" aria-pressed="${S.acctFilter === k}"><span class="eyebrow">${labels[k]}</span><span class="n">${all.filter(groups[k]).length}</span></button>`).join("")}</div>
   <section class="panel"><div class="panel-h"><h2>${labels[S.acctFilter]}</h2><span class="small muted">Approve a supplier by entering their SAP vendor code (CardCode).</span><button class="btn sm" id="refresh">Refresh</button></div>
   <div class="tbl-wrap"><table><thead><tr><th>Registered</th><th>Company / TIN</th><th>Contact</th><th>Role</th><th>Status</th><th>SAP vendor code</th><th></th></tr></thead><tbody>
@@ -598,16 +664,16 @@ function accountsView() {
     <td class="small mono">${fmtDT(p.created_at)}</td>
     <td><b>${esc(p.company_name)}</b><div class="small muted mono">${esc(p.tin)}</div></td>
     <td>${esc(p.contact_name)}<div class="small muted">${esc(p.email)}</div><div class="small muted">${esc(p.phone)}</div></td>
-    <td>${isAdmin() && !me ? `<select class="input" data-role style="width:auto">${["supplier", "staff", "admin"].map(r => `<option value="${r}"${p.role === r ? " selected" : ""}>${r}</option>`).join("")}</select>` : esc(p.role)}</td>
+    <td>${isAdmin() && !me ? `<select class="input" data-role style="width:auto">${["supplier", "staff", "admin"].map(r => `<option value="${r}"${(p.status === "pending" && p.requested_role === "staff" ? "staff" : p.role) === r ? " selected" : ""}>${r}</option>`).join("")}</select>` : esc(p.role)}${p.requested_role === "staff" && p.role === "supplier" ? `<div><span class="pill p-approved" style="margin-top:4px">Staff request</span></div>` : ""}</td>
     <td>${acctPill(p.status)}${p.status_note ? `<div class="small muted">${esc(p.status_note)}</div>` : ""}</td>
-    <td>${p.role === "supplier" ? (ed ? `<input class="input mono" data-vc value="${esc(p.vendor_code || "")}" placeholder="e.g. V-00123" style="width:130px">` : `<span class="mono">${esc(p.vendor_code || "—")}</span>`) : `<span class="muted small">n/a</span>`}</td>
+    <td>${p.role === "supplier" && !(p.requested_role === "staff" && p.status === "pending") ? (ed ? `<input class="input mono" data-vc value="${esc(p.vendor_code || "")}" placeholder="e.g. V-00123" style="width:130px">` : `<span class="mono">${esc(p.vendor_code || "—")}</span>`) : `<span class="muted small">n/a</span>`}</td>
     <td>${ed ? `<div class="row">
       ${p.status !== "approved" ? `<button class="btn sm ok" data-do="approve">Approve</button>` : `<button class="btn sm" data-do="save">Save</button>`}
       ${p.status === "pending" ? `<button class="btn sm danger" data-do="reject">Reject</button>` : ""}
       ${p.status === "approved" ? `<button class="btn sm danger" data-do="disable">Disable</button>` : ""}
     </div>` : `<span class="small muted">${me ? "You" : ""}</span>`}</td></tr>`; }).join("") || `<tr><td colspan="7" class="empty">${S.loaded.profiles ? "No accounts here." : "Loading…"}</td></tr>`}
   </tbody></table></div>
-  <div class="panel-b"><div class="note">New staff: ask them to sign up on this page, then an admin sets their role to <b>staff</b> and approves them.</div></div></section>`;
+  <div class="panel-b"><div class="note">New staff request access on the staff page (<a href="${esc(STAFF_URL)}">${esc(STAFF_URL)}</a>) with their ${STAFF_DOMAIN} email; an admin approves them here with role <b>staff</b>.</div></div></section>`;
 }
 async function accountAction(tr, what) {
   const p = S.profiles.find(x => x.id === tr.dataset.pid); if (!p) return;
