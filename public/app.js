@@ -142,6 +142,7 @@ async function loadProfiles() {
 function render() {
   renderWho();
   const app = $("#app");
+  document.body.classList.toggle("auth-mode", !S.session || (S.recovering && !!S.session));
   if (S.recovering && S.session) { renderTabs([]); app.innerHTML = resetView(); bindReset(); return; }
   if (!S.session) { renderTabs([]); app.innerHTML = authView(); bindAuth(); renderDrawer(); return; }
   if (!S.profile) { renderTabs([]); app.innerHTML = `<div class="empty" style="padding-top:80px"><div class="spinner" style="margin:0 auto 10px"></div>Loading your account…</div>`; return; }
@@ -178,73 +179,105 @@ function renderTabs(tabs) {
 }
 
 // ---------- sign in / sign up / reset ----------
+function authShell(card) {
+  const staff = MODE === "staff";
+  const points = staff
+    ? ["Review supplier invoices with the attached file", "Schedule Friday check releases in one go", "Record payments with proof of payment"]
+    : ["Submit your invoice with a scan or photo", "See when it's checked, scheduled and paid", "Know your check-release date and amount"];
+  return `<div class="auth-split">
+    <aside class="auth-side">
+      <div class="auth-brand"><div class="brand-mark" aria-hidden="true">F</div><div><b>Flexo Manufacturing Corporation</b><span>${staff ? "Accounts Payable · staff" : "Supplier Invoice Portal"}</span></div></div>
+      <h1>${staff ? "Review, schedule and pay supplier invoices." : "Submit invoices and track your payments in one place."}</h1>
+      <ul>${points.map(t => `<li>${t}</li>`).join("")}</ul>
+      <p class="auth-foot">${staff ? "For Flexo staff only." : "Questions about an invoice? Contact Flexo Accounting."}</p>
+    </aside>
+    <section class="auth-main"><div class="auth-card">${card}</div></section>
+  </div>`;
+}
+const aField = (id, label, type, extra = "", hint = "") => `<div class="field"><label for="${id}">${label}</label><input class="input" id="${id}" type="${type}" ${extra} required>${hint ? `<span class="hint">${hint}</span>` : ""}</div>`;
+const aPass = (id, label, ac, side = "") => `<div class="field"><div class="label-row"><label for="${id}">${label}</label>${side}</div>
+  <div class="pw-wrap"><input class="input" id="${id}" type="password" autocomplete="${ac}" required><button type="button" class="pw-toggle" data-pw="${id}" aria-label="Show password">Show</button></div></div>`;
+const aLink = (mode, text) => `<button type="button" class="linkbtn" data-mode="${mode}">${text}</button>`;
+const aMsgs = `<p class="err" id="au-err" role="alert" hidden></p><div class="note ok" id="au-ok" role="status" hidden></div>`;
+
 function authView() {
   const m = S.authMode;
-  const f = (id, label, type = "text", extra = "") => `<div class="field"><label for="${id}">${label} <span class="req">*</span></label><input class="input" id="${id}" type="${type}" ${extra}></div>`;
-  let body = "";
-  if (MODE === "staff") return staffAuthView(f);
-  if (m === "signin") body = `
-    ${f("au-email", "Email", "email", 'autocomplete="email"')}
-    ${f("au-pass", "Password", "password", 'autocomplete="current-password"')}
-    <button class="btn primary" id="au-go">Sign in</button>
-    <p class="small muted">New supplier? Choose <b>Sign up</b>. Flexo Accounting approves each account before invoices can be submitted.</p>`;
-  else if (m === "signup") body = `
-    ${f("su-company", "Company name (as registered with BIR)", "text", 'autocomplete="organization"')}
-    <div class="grid g2">${f("su-tin", "TIN", "text", 'placeholder="000-000-000-00000"')}${f("su-phone", "Mobile / phone", "tel", 'autocomplete="tel"')}</div>
-    ${f("su-contact", "Contact person", "text", 'autocomplete="name"')}
-    ${f("su-email", "Email", "email", 'autocomplete="email"')}
-    <div class="grid g2">${f("su-pass", "Password (min. 8)", "password", 'autocomplete="new-password"')}${f("su-pass2", "Confirm password", "password", 'autocomplete="new-password"')}</div>
-    <button class="btn primary" id="au-go">Create account</button>
-    <p class="small muted">After you sign up, Flexo Accounting checks your details and links your account to your supplier record. You can submit invoices once approved.</p>`;
-  else body = `
-    ${f("fp-email", "Email", "email", 'autocomplete="email"')}
-    <button class="btn primary" id="au-go">Send reset link</button>
-    <p class="small muted">We'll email you a link to set a new password. If it doesn't arrive, contact Flexo Accounting.</p>`;
-  return `<div class="auth panel">
-    <div class="panel-h"><h2>${m === "signup" ? "Supplier sign-up" : m === "forgot" ? "Reset password" : "Sign in"}</h2></div>
-    <div class="panel-b">
-      <div class="seg3" role="group" aria-label="Choose">
-        <button data-mode="signin" aria-pressed="${m === "signin"}">Sign in</button>
-        <button data-mode="signup" aria-pressed="${m === "signup"}">Sign up</button>
-        <button data-mode="forgot" aria-pressed="${m === "forgot"}">Forgot password</button>
-      </div>
-      ${body}
-      <p class="err" id="au-err" hidden></p>
-      <div class="note ok" id="au-ok" hidden></div>
-    </div></div>`;
+  if (MODE === "staff") return staffAuthView();
+  if (m === "signup") return authShell(`
+    <h2>Create a supplier account</h2>
+    <p class="lead">Flexo Accounting reviews each new account. Once approved, you can submit invoices here.</p>
+    <form id="auth-form" class="stack" novalidate>
+      <fieldset class="auth-group"><legend>Company</legend>
+        ${aField("su-company", "Company name (as registered with BIR)", "text", 'autocomplete="organization"')}
+        <div class="grid g2">${aField("su-tin", "TIN", "text", 'placeholder="000-000-000-000"')}${aField("su-phone", "Mobile / phone", "tel", 'autocomplete="tel"')}</div>
+        ${aField("su-contact", "Contact person", "text", 'autocomplete="name"')}
+      </fieldset>
+      <fieldset class="auth-group"><legend>Sign-in details</legend>
+        ${aField("su-email", "Email", "email", 'autocomplete="email"')}
+        ${aPass("su-pass", "Password", "new-password", '<span class="hint">At least 8 characters</span>')}
+        ${aPass("su-pass2", "Confirm password", "new-password")}
+      </fieldset>
+      ${aMsgs}
+      <button class="btn primary block" id="au-go" type="submit">Create account</button>
+    </form>
+    <div class="auth-alt">Already have an account? ${aLink("signin", "Sign in")}</div>`);
+  if (m === "forgot") return authShell(`
+    <h2>Reset your password</h2>
+    <p class="lead">Enter the email you signed up with and we'll send you a link to set a new password.</p>
+    <form id="auth-form" class="stack" novalidate>
+      ${aField("fp-email", "Email", "email", 'autocomplete="email"')}
+      ${aMsgs}
+      <button class="btn primary block" id="au-go" type="submit">Send reset link</button>
+    </form>
+    <div class="auth-alt">${aLink("signin", "← Back to sign in")}</div>`);
+  return authShell(`
+    <h2>Sign in</h2>
+    <p class="lead">Welcome back. Sign in to submit invoices and check your payments.</p>
+    <form id="auth-form" class="stack" novalidate>
+      ${aField("au-email", "Email", "email", 'autocomplete="email"')}
+      ${aPass("au-pass", "Password", "current-password", aLink("forgot", "Forgot password?"))}
+      ${aMsgs}
+      <button class="btn primary block" id="au-go" type="submit">Sign in</button>
+    </form>
+    <div class="auth-alt">New supplier? ${aLink("signup", "Create an account")}</div>`);
 }
-function staffAuthView(f) {
+function staffAuthView() {
   const m = S.authMode === "signup" ? "request" : S.authMode;
-  let body = "";
-  if (m === "signin") body = `
-    ${cfg.microsoftLogin ? `<button class="btn primary" id="ms-go" style="justify-content:center;padding:10px">${MS_ICON} Sign in with Microsoft 365</button>
-    <div class="row small muted" style="gap:8px"><span class="hr" style="flex:1"></span>or with email and password<span class="hr" style="flex:1"></span></div>` : ""}
-    ${f("au-email", "Flexo email", "email", 'autocomplete="email"')}
-    ${f("au-pass", "Password", "password", 'autocomplete="current-password"')}
-    <button class="btn${cfg.microsoftLogin ? "" : " primary"}" id="au-go">Sign in</button>
-    <p class="small muted" style="margin:0">With email and password you'll also enter a 6-digit code from an authenticator app.</p>`;
-  else if (m === "request") body = `
-    ${f("rq-name", "Full name", "text", 'autocomplete="name"')}
-    ${f("rq-email", "Flexo email", "email", `autocomplete="email" placeholder="name${STAFF_DOMAIN}"`)}
-    <div class="grid g2">${f("rq-pass", "Password (min. 8)", "password", 'autocomplete="new-password"')}${f("rq-pass2", "Confirm password", "password", 'autocomplete="new-password"')}</div>
-    <button class="btn primary" id="au-go">Request access</button>
-    <p class="small muted">Only ${STAFF_DOMAIN} emails. An admin approves each request before you can use the staff portal.</p>`;
-  else body = `
-    ${f("fp-email", "Flexo email", "email", 'autocomplete="email"')}
-    <button class="btn primary" id="au-go">Send reset link</button>`;
-  return `<div class="auth panel">
-    <div class="panel-h"><h2>${m === "request" ? "Request staff access" : m === "forgot" ? "Reset password" : "Flexo staff sign in"}</h2><span class="pill p-approved">Staff only</span></div>
-    <div class="panel-b">
-      <div class="seg3" role="group" aria-label="Choose">
-        <button data-mode="signin" aria-pressed="${m === "signin"}">Sign in</button>
-        <button data-mode="request" aria-pressed="${m === "request"}">Request access</button>
-        <button data-mode="forgot" aria-pressed="${m === "forgot"}">Forgot password</button>
-      </div>
-      ${body}
-      <p class="err" id="au-err" hidden></p>
-      <div class="note ok" id="au-ok" hidden></div>
-      <p class="small muted" style="margin:0">Supplier? <a href="${esc(SUPPLIER_URL)}">Go to the supplier portal</a></p>
-    </div></div>`;
+  const supplierLink = `<p class="auth-switch">Supplier? <a href="${esc(SUPPLIER_URL)}">Go to the supplier portal</a></p>`;
+  if (m === "request") return authShell(`
+    <h2>Request staff access</h2>
+    <p class="lead">Use your ${STAFF_DOMAIN} email. An admin approves each request.</p>
+    <form id="auth-form" class="stack" novalidate>
+      ${aField("rq-name", "Full name", "text", 'autocomplete="name"')}
+      ${aField("rq-email", "Flexo email", "email", `autocomplete="email" placeholder="name${STAFF_DOMAIN}"`)}
+      ${aPass("rq-pass", "Password", "new-password", '<span class="hint">At least 8 characters</span>')}
+      ${aPass("rq-pass2", "Confirm password", "new-password")}
+      ${aMsgs}
+      <button class="btn primary block" id="au-go" type="submit">Request access</button>
+    </form>
+    <div class="auth-alt">Already have access? ${aLink("signin", "Sign in")}</div>${supplierLink}`);
+  if (m === "forgot") return authShell(`
+    <h2>Reset your password</h2>
+    <p class="lead">Enter your Flexo email and we'll send you a link to set a new password.</p>
+    <form id="auth-form" class="stack" novalidate>
+      ${aField("fp-email", "Flexo email", "email", 'autocomplete="email"')}
+      ${aMsgs}
+      <button class="btn primary block" id="au-go" type="submit">Send reset link</button>
+    </form>
+    <div class="auth-alt">${aLink("signin", "← Back to sign in")}</div>${supplierLink}`);
+  return authShell(`
+    <h2>Staff sign in</h2>
+    <p class="lead">Flexo Accounts Payable</p>
+    ${cfg.microsoftLogin ? `<button class="btn block ms-btn" id="ms-go" type="button">${MS_ICON} Sign in with Microsoft 365</button>
+    <div class="or"><span>or</span></div>` : ""}
+    <form id="auth-form" class="stack" novalidate>
+      ${aField("au-email", "Flexo email", "email", 'autocomplete="email"')}
+      ${aPass("au-pass", "Password", "current-password", aLink("forgot", "Forgot password?"))}
+      ${aMsgs}
+      <button class="btn primary block" id="au-go" type="submit">Sign in</button>
+      <p class="small muted" style="margin:0;text-align:center">Next, you'll enter the 6-digit code from your authenticator app.</p>
+    </form>
+    <div class="auth-alt">Need access? ${aLink("request", "Request staff access")}</div>${supplierLink}`);
 }
 const MS_ICON = `<svg width="16" height="16" viewBox="0 0 21 21" aria-hidden="true"><rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/><rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg>`;
 
@@ -352,21 +385,35 @@ function bindAuth() {
       }
     } finally { if (btn.isConnected) btn.disabled = false; }
   };
-  $("#au-go").onclick = go;
+  $("#auth-form").onsubmit = e => { e.preventDefault(); go(); };
   if ($("#ms-go")) $("#ms-go").onclick = async () => {
     const { error } = await S.sb.auth.signInWithOAuth({ provider: "azure", options: { scopes: "openid email profile", redirectTo: STAFF_URL } });
     if (error) err(friendly(error));
   };
-  $$("#app input").forEach(i => i.addEventListener("keydown", e => { if (e.key === "Enter") go(); }));
+  bindPwToggles();
+  const first = $("#auth-form input"); if (first && !matchMedia("(max-width: 860px)").matches) first.focus();
+}
+function bindPwToggles() {
+  $$(".pw-toggle").forEach(b => (b.onclick = () => {
+    const i = document.getElementById(b.dataset.pw); const show = i.type === "password";
+    i.type = show ? "text" : "password"; b.textContent = show ? "Hide" : "Show"; b.setAttribute("aria-label", show ? "Hide password" : "Show password");
+  }));
 }
 function resetView() {
-  return `<div class="auth panel"><div class="panel-h"><h2>Set a new password</h2></div><div class="panel-b">
-    <div class="field"><label for="rp-pass">New password (min. 8)</label><input class="input" id="rp-pass" type="password" autocomplete="new-password"></div>
-    <div class="field"><label for="rp-pass2">Confirm new password</label><input class="input" id="rp-pass2" type="password" autocomplete="new-password"></div>
-    <button class="btn primary" id="rp-go">Save password</button><p class="err" id="rp-err" hidden></p></div></div>`;
+  return authShell(`
+    <h2>Set a new password</h2>
+    <p class="lead">Choose a new password for ${esc(S.session?.user?.email || "your account")}.</p>
+    <form id="rp-form" class="stack" novalidate>
+      ${aPass("rp-pass", "New password", "new-password", '<span class="hint">At least 8 characters</span>')}
+      ${aPass("rp-pass2", "Confirm new password", "new-password")}
+      <p class="err" id="rp-err" role="alert" hidden></p>
+      <button class="btn primary block" id="rp-go" type="submit">Save password</button>
+    </form>`);
 }
 function bindReset() {
-  $("#rp-go").onclick = async () => {
+  bindPwToggles();
+  $("#rp-form").onsubmit = async ev => {
+    ev.preventDefault();
     const e = $("#rp-err"); const p = $("#rp-pass").value;
     if (p.length < 8) { e.textContent = "Password must be at least 8 characters."; e.hidden = false; return; }
     if (p !== $("#rp-pass2").value) { e.textContent = "The two passwords don't match."; e.hidden = false; return; }
