@@ -4,7 +4,8 @@
 -- Who can do what (enforced by the database, not just the screen):
 --   supplier (pending)   can sign in and see "awaiting approval"; cannot submit
 --   supplier (approved)  submits invoices + files; sees ONLY their own invoices
---   staff                sees all invoices; approves / returns / marks paid;
+--   staff                sees all invoices; marks OK / returns; schedules the Friday
+--                        check release; marks paid with proof of payment;
 --                        approves supplier accounts and sets their SAP vendor code
 --   admin                everything staff can do + makes other users staff/admin
 --
@@ -136,17 +137,43 @@ create table if not exists public.invoices (
   dr_date       date not null,
   file_path     text not null,
   file_name     text not null,
-  status        text not null default 'submitted'
-                check (status in ('submitted', 'approved', 'returned', 'paid')),
+  status        text not null default 'submitted',
   return_reason text,
   paid_date     date,
   payment_ref   text,
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now(),
-  updated_by    uuid,
-  constraint returned_needs_reason check (status <> 'returned' or coalesce(trim(return_reason), '') <> ''),
-  constraint paid_needs_details    check (status <> 'paid' or (paid_date is not null and coalesce(trim(payment_ref), '') <> ''))
+  updated_by    uuid
 );
+
+-- Check release schedule + proof of payment (added in v2.1; safe on existing tables).
+alter table public.invoices add column if not exists release_date   date;           -- always a Friday
+alter table public.invoices add column if not exists release_amount numeric(14, 2); -- what the supplier will receive
+alter table public.invoices add column if not exists release_note   text;           -- e.g. "less 1% EWT"
+alter table public.invoices add column if not exists proof_path     text;           -- proof of payment file
+alter table public.invoices add column if not exists proof_name     text;
+
+-- Workflow: submitted → approved ("Checked OK") → scheduled (Friday release) → paid
+alter table public.invoices drop constraint if exists invoices_status_check;
+alter table public.invoices add  constraint invoices_status_check
+  check (status in ('submitted', 'approved', 'scheduled', 'returned', 'paid'));
+alter table public.invoices drop constraint if exists returned_needs_reason;
+alter table public.invoices add  constraint returned_needs_reason
+  check (status <> 'returned' or coalesce(trim(return_reason), '') <> '');
+alter table public.invoices drop constraint if exists release_on_friday;
+alter table public.invoices add  constraint release_on_friday
+  check (release_date is null or extract(isodow from release_date) = 5);
+alter table public.invoices drop constraint if exists release_amount_range;
+alter table public.invoices add  constraint release_amount_range
+  check (release_amount is null or (release_amount > 0 and release_amount <= total_amount));
+-- NOT VALID: enforced for every new change, without failing on invoices paid before v2.1.
+alter table public.invoices drop constraint if exists scheduled_needs_release;
+alter table public.invoices add  constraint scheduled_needs_release
+  check (status not in ('scheduled', 'paid') or (release_date is not null and release_amount is not null)) not valid;
+alter table public.invoices drop constraint if exists paid_needs_details;
+alter table public.invoices add  constraint paid_needs_details
+  check (status <> 'paid' or (paid_date is not null and coalesce(trim(payment_ref), '') <> ''
+                              and coalesce(proof_path, '') <> '')) not valid;
 
 -- Same supplier can't submit the same invoice number twice (unless it was returned).
 create unique index if not exists invoices_no_duplicates
@@ -169,6 +196,8 @@ begin
   new.dr_no := trim(new.dr_no);
   new.status := 'submitted';
   new.return_reason := null; new.paid_date := null; new.payment_ref := null;
+  new.release_date := null; new.release_amount := null; new.release_note := null;
+  new.proof_path := null; new.proof_name := null;
   new.created_at := now(); new.updated_at := now(); new.updated_by := auth.uid();
   return new;
 end $$;
@@ -191,15 +220,28 @@ begin
       old.vatex_amount, old.total_amount, old.dr_no, old.dr_date, old.file_path, old.file_name, old.created_at) then
     raise exception 'Submitted invoice details cannot be changed';
   end if;
+  if old.status = 'paid' then
+    raise exception 'Paid invoices cannot be changed';
+  end if;
   if new.status <> old.status and not (
        (old.status = 'submitted' and new.status in ('approved', 'returned'))
-    or (old.status = 'approved'  and new.status in ('paid', 'returned', 'submitted'))
+    or (old.status = 'approved'  and new.status in ('scheduled', 'returned', 'submitted'))
+    or (old.status = 'scheduled' and new.status in ('paid', 'approved', 'returned'))
     or (old.status = 'returned'  and new.status = 'submitted')
   ) then
     raise exception 'Cannot change status from % to %', old.status, new.status;
   end if;
+  if new.status = 'paid' then
+    -- the schedule the supplier was told stays as it was
+    new.release_date := old.release_date; new.release_amount := old.release_amount; new.release_note := old.release_note;
+  end if;
   if new.status <> 'returned' then new.return_reason := null; end if;
-  if new.status <> 'paid' then new.paid_date := null; new.payment_ref := null; end if;
+  if new.status not in ('scheduled', 'paid') then
+    new.release_date := null; new.release_amount := null; new.release_note := null;
+  end if;
+  if new.status <> 'paid' then
+    new.paid_date := null; new.payment_ref := null; new.proof_path := null; new.proof_name := null;
+  end if;
   new.updated_at := now(); new.updated_by := auth.uid();
   return new;
 end $$;
@@ -230,11 +272,19 @@ begin
   if tg_op = 'INSERT' then
     insert into public.invoice_events (invoice_id, actor_id, actor_name, action)
     values (new.id, auth.uid(), coalesce(who, 'system'), 'submitted');
-  elsif new.status is distinct from old.status then
+  elsif new.status is distinct from old.status
+     or (new.status = 'scheduled' and (new.release_date, new.release_amount, new.release_note)
+                                      is distinct from (old.release_date, old.release_amount, old.release_note)) then
     insert into public.invoice_events (invoice_id, actor_id, actor_name, action, note)
-    values (new.id, auth.uid(), coalesce(who, 'system'), new.status,
-            case new.status when 'returned' then new.return_reason
-                            when 'paid' then 'Paid ' || new.paid_date || ', ref ' || new.payment_ref end);
+    values (new.id, auth.uid(), coalesce(who, 'system'),
+            case when new.status = old.status then 'rescheduled' else new.status end,
+            case new.status
+              when 'returned'  then new.return_reason
+              when 'scheduled' then 'Check release ' || to_char(new.release_date, 'Dy Mon DD, YYYY')
+                                    || ' · PHP ' || to_char(new.release_amount, 'FM999,999,999,990.00')
+                                    || coalesce(' (' || nullif(trim(new.release_note), '') || ')', '')
+              when 'paid'      then 'Paid ' || to_char(new.paid_date, 'Mon DD, YYYY') || ', ref ' || new.payment_ref
+            end);
   end if;
   return null;
 end $$;
@@ -278,8 +328,10 @@ grant select                 on public.invoice_events to authenticated;
 revoke execute on function public.handle_new_user() from public, anon, authenticated;
 
 -- ---------------------------------------------------------------------------
--- Storage: private bucket; each supplier uploads into a folder named after
--- their user id; staff can read every file.
+-- Storage: private bucket.
+--   <supplier user id>/...        invoice files, uploaded by that supplier
+--   payments/<invoice id>/...     proof of payment, uploaded by staff,
+--                                 readable by the supplier of that invoice
 -- ---------------------------------------------------------------------------
 do $$
 begin
@@ -295,13 +347,23 @@ begin
   execute 'drop policy if exists "pilot invoice files upload" on storage.objects';
   execute 'drop policy if exists "invoice files upload own" on storage.objects';
   execute 'drop policy if exists "invoice files read own or staff" on storage.objects';
+  execute 'drop policy if exists "payment proofs upload staff" on storage.objects';
   execute $p$create policy "invoice files upload own" on storage.objects for insert to authenticated
     with check (bucket_id = 'invoice-files'
                 and (storage.foldername(name))[1] = auth.uid()::text
                 and public.is_approved_supplier())$p$;
+  execute $p$create policy "payment proofs upload staff" on storage.objects for insert to authenticated
+    with check (bucket_id = 'invoice-files'
+                and (storage.foldername(name))[1] = 'payments'
+                and public.is_staff())$p$;
   execute $p$create policy "invoice files read own or staff" on storage.objects for select to authenticated
     using (bucket_id = 'invoice-files'
-           and ((storage.foldername(name))[1] = auth.uid()::text or public.is_staff()))$p$;
+           and ((storage.foldername(name))[1] = auth.uid()::text
+                or public.is_staff()
+                or ((storage.foldername(name))[1] = 'payments'
+                    and exists (select 1 from public.invoices i
+                                 where i.id::text = (storage.foldername(name))[2]
+                                   and i.supplier_id = auth.uid()))))$p$;
 exception when undefined_table or invalid_schema_name then
   raise notice 'storage schema not found (not a Supabase database?) — skipping bucket setup';
 end $$;

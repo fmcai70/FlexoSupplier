@@ -1,9 +1,9 @@
 # Flexo Supplier Invoice Portal
 
-Suppliers sign up, Flexo Accounting approves them, and then they submit invoices
-online. Each submission is 7 required fields plus the invoice file. Flexo staff review
-every invoice and approve it for payment, return it to the supplier with a reason, or
-mark it paid. Suppliers can follow the status of each invoice in the portal.
+Suppliers sign up, Flexo Accounting approves them, and then they submit invoices online.
+Each submission is 7 required fields plus the invoice file. Accounting checks each invoice,
+schedules its check release for a Friday, and marks it paid with a proof of payment. The
+supplier sees when they will be paid and how much, and can open the proof once it is paid.
 
 | Piece | Where it runs |
 |---|---|
@@ -18,20 +18,36 @@ mark it paid. Suppliers can follow the status of each invoice in the portal.
 
 ```mermaid
 flowchart LR
-  subgraph Supplier
-    SU[Sign up] --> PEND[Pending approval]
-  end
-  PEND -->|Flexo approves + sets SAP vendor code| OK[Approved supplier]
-  OK --> SUB[Submit invoice: 7 fields + file]
-  subgraph Flexo["Flexo AP staff"]
-    SUB --> REV[For review]
-    REV -->|Approve| APP[Approved for payment]
-    REV -->|Return + reason| RET[Returned to supplier]
-    APP -->|Mark paid: date + ref| PAID[Paid]
-    APP -->|Return + reason| RET
-  end
+  SU[Supplier signs up] --> PEND[Pending approval]
+  PEND -->|Accounting approves + sets SAP vendor code| SUB[Supplier submits invoice: 7 fields + file]
+  SUB --> REV[For review]
+  REV -->|Mark as OK| OK[Checked OK]
+  OK -->|Schedule check release: Friday + amount| SCH[Scheduled]
+  SCH -->|Mark paid: date, check no., proof of payment| PAID[Paid]
+  REV -->|Return + reason| RET[Returned]
+  OK -->|Return + reason| RET
+  SCH -->|Return + reason| RET
   RET -->|Supplier corrects and resubmits| SUB
 ```
+
+### Accounting steps
+1. **For review → Mark as OK.** Check the typed values against the attached invoice and SAP.
+2. **Checked OK → Schedule check release.** You can tick several invoices and click
+   **Schedule selected** for a Friday, which releases the full total for each. Or you can open one
+   invoice and set the **amount to be released** and a **note to the supplier**, for example
+   *less 1% EWT*. The release date can only be a Friday. The amount can't be more than the invoice total.
+   You can change or remove a schedule until the invoice is paid.
+3. **Scheduled → Mark as paid.** Enter the payment date and check / reference no., and attach the
+   **proof of payment** (PDF, JPG or PNG). Once paid, the invoice can't be changed any more.
+
+The **Scheduled for release** list shows the total per Friday, which you can use for the check run.
+Use **Export CSV** to download the list.
+
+### What the supplier sees
+- **My invoices** shows each invoice's status.
+- Once scheduled, it shows the **check release date and amount**, with any note. A card at the top
+  totals each upcoming Friday.
+- Once paid, it shows the payment date and reference, and a **View proof of payment** button.
 
 ### Invoice fields (all required)
 1. Invoice number
@@ -58,7 +74,7 @@ the invoice number was used before.
 |---|---|
 | Supplier (pending) | Sign in and see "awaiting approval". Cannot submit |
 | Supplier (approved) | Submit invoices, and see **only their own** invoices and files |
-| Staff | See all invoices; approve, return or mark paid; approve or reject supplier accounts and set their SAP vendor code; export CSV |
+| Staff | See all invoices; mark OK, return, schedule check release, mark paid with proof; approve or reject supplier accounts and set their SAP vendor code; export CSV |
 | Admin | Everything staff can do, and also make other accounts staff or admin |
 
 These rules are enforced **by the database** (Supabase row-level security in
@@ -73,6 +89,7 @@ that nobody can edit.
 
 ### 1. Supabase database
 1. In your Supabase project, open **SQL Editor**. Paste the whole of `supabase/schema.sql` and click **Run**.
+   Run it again after every update to this file. It is safe to re-run and keeps your data.
    - If you used the earlier pilot version, this also locks its old open table (`docs`).
      Nothing is deleted. You can remove that table later with `drop table public.docs;`.
 2. Go to **Authentication → Sign In / Providers → Email**:

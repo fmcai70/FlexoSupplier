@@ -17,7 +17,7 @@ const S = {
   tab: null, authMode: "signin",
   invoices: [], profiles: [], loaded: { invoices: false, profiles: false },
   filter: "submitted", q: "", acctFilter: "pending",
-  openId: null, lastSubmitted: null,
+  openId: null, lastSubmitted: null, sel: new Set(),
 };
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -50,8 +50,9 @@ function friendly(err) {
 }
 
 const STATUS = {
-  submitted: { label: "Submitted — for review", sup: "Received — under review", cls: "p-submitted" },
-  approved: { label: "Approved for payment", sup: "Approved for payment", cls: "p-approved" },
+  submitted: { label: "For review", sup: "Received — under review", cls: "p-submitted" },
+  approved: { label: "Checked OK — to schedule", sup: "Checked OK — awaiting payment schedule", cls: "p-approved" },
+  scheduled: { label: "Scheduled for release", sup: "Payment scheduled", cls: "p-ready" },
   returned: { label: "Returned to supplier", sup: "Returned — see reason", cls: "p-returned" },
   paid: { label: "Paid", sup: "Paid", cls: "p-paid" },
 };
@@ -334,25 +335,52 @@ async function submitInvoice(e) {
   }
 }
 
+// ---------- check release dates (always Fridays) ----------
+const isoDate = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+function nextFridays(n = 10) {
+  const d = new Date(); d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + ((5 - d.getDay() + 7) % 7)); // today if it's Friday
+  const out = [];
+  for (let k = 0; k < n; k++) { out.push(isoDate(d)); d.setDate(d.getDate() + 7); }
+  return out;
+}
+const fmtFri = s => { if (!s) return "—"; const d = new Date(s + "T00:00:00"); return d.toLocaleDateString("en-PH", { weekday: "short", month: "short", day: "numeric", year: "numeric" }); };
+const fridayOptions = selected => {
+  const list = nextFridays(10);
+  if (selected && !list.includes(selected)) list.unshift(selected);
+  return list.map((f, k) => `<option value="${f}"${(selected ? f === selected : k === 0) ? " selected" : ""}>${fmtFri(f)}${k === 0 && !selected && f === todayISO() ? " (today)" : ""}</option>`).join("");
+};
+function releaseCell(i, supplierView) {
+  if (i.status === "scheduled") return `<div class="small"><b>Check release ${fmtFri(i.release_date)}</b></div><div class="small mono">${peso(i.release_amount)}</div>${i.release_note ? `<div class="small muted">${esc(i.release_note)}</div>` : ""}`;
+  if (i.status === "paid") return `<div class="small">Paid ${fmtDate(i.paid_date)}</div><div class="small mono">${peso(i.release_amount ?? i.total_amount)}</div><div class="small muted">Ref ${esc(i.payment_ref)}</div>${i.proof_path ? `<button class="btn sm" data-proof="${esc(i.id)}" style="margin-top:4px">${supplierView ? "View proof of payment" : "Proof"}</button>` : ""}`;
+  return "";
+}
+
 // ---------- supplier: my invoices ----------
 function mineView() {
   const rows = S.invoices;
-  return `<section class="panel" style="margin-top:20px"><div class="panel-h"><h2>My invoices</h2><span class="small muted">${rows.length} invoice${rows.length === 1 ? "" : "s"}</span><button class="btn sm" id="refresh">Refresh</button></div>
-  <div class="tbl-wrap"><table><thead><tr><th>Submitted</th><th>Invoice no.</th><th>Invoice date</th><th>PO no.</th><th>DR no. / date</th><th class="num">VAT-ex</th><th class="num">Total</th><th>Status</th><th></th></tr></thead><tbody>
+  const upcoming = {};
+  rows.filter(i => i.status === "scheduled").forEach(i => { (upcoming[i.release_date] = upcoming[i.release_date] || { c: 0, a: 0 }); upcoming[i.release_date].c++; upcoming[i.release_date].a += Number(i.release_amount || 0); });
+  const dates = Object.keys(upcoming).sort();
+  return `${dates.length ? `<div class="chips">${dates.map(d => `<div class="chip" aria-pressed="false"><span class="eyebrow">Check release · ${fmtFri(d)}</span><span class="n">${peso(upcoming[d].a)}</span><span class="amt">${upcoming[d].c} invoice${upcoming[d].c === 1 ? "" : "s"}</span></div>`).join("")}</div>` : ""}
+  <section class="panel" style="margin-top:20px"><div class="panel-h"><h2>My invoices</h2><span class="small muted">${rows.length} invoice${rows.length === 1 ? "" : "s"}</span><button class="btn sm" id="refresh">Refresh</button></div>
+  <div class="tbl-wrap"><table><thead><tr><th>Submitted</th><th>Invoice no.</th><th>Invoice date</th><th>PO no.</th><th>DR no. / date</th><th class="num">Total</th><th>Status</th><th>Payment</th><th></th></tr></thead><tbody>
   ${rows.map(i => `<tr>
     <td class="small mono">${fmtDT(i.created_at)}</td><td class="mono">${esc(i.invoice_no)}</td><td>${fmtDate(i.invoice_date)}</td><td class="mono">${esc(i.po_no)}</td>
     <td class="mono">${esc(i.dr_no)}<div class="small muted">${fmtDate(i.dr_date)}</div></td>
-    <td class="num">${peso(i.vatex_amount)}</td><td class="num">${peso(i.total_amount)}</td>
-    <td>${pill(i.status, true)}${i.status === "returned" ? `<div class="small" style="color:var(--bad)">${esc(i.return_reason)}</div><div class="small muted">Correct it and submit again.</div>` : ""}${i.status === "paid" ? `<div class="small muted">${fmtDate(i.paid_date)} · Ref ${esc(i.payment_ref)}</div>` : ""}</td>
-    <td><button class="btn sm" data-file="${esc(i.id)}">View file</button></td></tr>`).join("") || `<tr><td colspan="9" class="empty">${S.loaded.invoices ? "No invoices submitted yet." : "Loading…"}</td></tr>`}
+    <td class="num">${peso(i.total_amount)}<div class="small muted">VAT-ex ${peso(i.vatex_amount)}</div></td>
+    <td>${pill(i.status, true)}${i.status === "returned" ? `<div class="small" style="color:var(--bad)">${esc(i.return_reason)}</div><div class="small muted">Correct it and submit again.</div>` : ""}</td>
+    <td>${releaseCell(i, true)}</td>
+    <td><button class="btn sm" data-file="${esc(i.id)}">View invoice</button></td></tr>`).join("") || `<tr><td colspan="9" class="empty">${S.loaded.invoices ? "No invoices submitted yet." : "Loading…"}</td></tr>`}
   </tbody></table></div></section>`;
 }
-async function openFile(inv) {
+async function openStored(path) {
   const w = window.open("", "_blank");
-  const { data, error } = await S.sb.storage.from(BUCKET).createSignedUrl(inv.file_path, 600);
+  const { data, error } = await S.sb.storage.from(BUCKET).createSignedUrl(path, 600);
   if (error) { if (w) w.close(); toast(friendly(error)); return; }
   if (w) w.location = data.signedUrl; else location.href = data.signedUrl;
 }
+const openFile = inv => openStored(inv.file_path);
 
 // ---------- staff: invoice queue ----------
 function invMatches(i) {
@@ -360,30 +388,64 @@ function invMatches(i) {
   const q = S.q.toLowerCase();
   return [i.company_name, i.vendor_code, i.invoice_no, i.po_no, i.dr_no].join(" ").toLowerCase().includes(q);
 }
+const CHIPS = [["submitted", "For review"], ["approved", "Checked OK — to schedule"], ["scheduled", "Scheduled for release"], ["paid", "Paid"], ["returned", "Returned"], ["all", "All"]];
+const queueRows = () => S.invoices.filter(i => (S.filter === "all" || i.status === S.filter) && invMatches(i))
+  .sort((a, b) => S.filter === "scheduled" ? String(a.release_date).localeCompare(String(b.release_date)) || a.company_name.localeCompare(b.company_name) : 0);
 function queueView() {
   const all = S.invoices;
-  const agg = k => { const xs = k === "all" ? all : all.filter(i => i.status === k); return { c: xs.length, a: xs.reduce((s, i) => s + Number(i.total_amount || 0), 0) }; };
-  const chips = [["submitted", "For review"], ["approved", "Approved for payment"], ["returned", "Returned"], ["paid", "Paid"], ["all", "All"]];
-  const rows = all.filter(i => (S.filter === "all" || i.status === S.filter) && invMatches(i));
-  return `<div class="chips">${chips.map(([k, l]) => { const a = agg(k); return `<button class="chip" data-chip="${k}" aria-pressed="${S.filter === k}"><span class="eyebrow">${l}</span><span class="n">${a.c}</span><span class="amt">${peso(a.a)}</span></button>`; }).join("")}</div>
-  <section class="panel"><div class="panel-h"><h2>${esc(chips.find(c => c[0] === S.filter)[1])}</h2>
+  const amt = i => Number((["scheduled", "paid"].includes(i.status) && i.release_amount != null) ? i.release_amount : i.total_amount || 0);
+  const agg = k => { const xs = k === "all" ? all : all.filter(i => i.status === k); return { c: xs.length, a: xs.reduce((s, i) => s + amt(i), 0) }; };
+  const rows = queueRows();
+  const pick = S.filter === "approved";
+  if (!S.sel) S.sel = new Set();
+  for (const id of [...S.sel]) if (!rows.some(r => r.id === id)) S.sel.delete(id);
+  let extra = "";
+  if (pick) extra = `<div class="inline-conf" style="margin:0 16px 12px">
+      <span class="small" style="align-self:center"><b id="sel-n">${S.sel.size}</b> selected</span>
+      <div class="field"><label for="bulk-fri">Check release (Friday)</label><select class="input" id="bulk-fri">${fridayOptions()}</select></div>
+      <button class="btn primary" id="bulk-go" ${S.sel.size ? "" : "disabled"}>Schedule selected</button>
+      <span class="small muted" style="align-self:center">Releases the full invoice total. To release a different amount (e.g. less EWT), open the invoice instead.</span></div>`;
+  if (S.filter === "scheduled") {
+    const by = {}; rows.forEach(i => { (by[i.release_date] = by[i.release_date] || { c: 0, a: 0 }); by[i.release_date].c++; by[i.release_date].a += Number(i.release_amount || 0); });
+    const ds = Object.keys(by).sort();
+    if (ds.length) extra = `<div class="chips" style="margin:0 16px 12px">${ds.map(d => `<div class="chip"><span class="eyebrow">${fmtFri(d)}</span><span class="n">${peso(by[d].a)}</span><span class="amt">${by[d].c} invoice${by[d].c === 1 ? "" : "s"}</span></div>`).join("")}</div>`;
+  }
+  const showRel = ["scheduled", "paid", "all"].includes(S.filter);
+  return `<div class="chips">${CHIPS.map(([k, l]) => { const a = agg(k); return `<button class="chip" data-chip="${k}" aria-pressed="${S.filter === k}"><span class="eyebrow">${l}</span><span class="n">${a.c}</span><span class="amt">${peso(a.a)}</span></button>`; }).join("")}</div>
+  <section class="panel"><div class="panel-h"><h2>${esc(CHIPS.find(c => c[0] === S.filter)[1])}</h2>
     <div class="filters"><input class="input" id="q" type="search" placeholder="Search supplier, invoice, PO, DR" value="${esc(S.q)}">
     <button class="btn sm" id="refresh">Refresh</button><button class="btn sm primary" id="export" ${rows.length ? "" : "disabled"}>Export CSV</button></div></div>
-  <div class="tbl-wrap"><table><thead><tr><th>Submitted</th><th>Supplier</th><th>Invoice no. / date</th><th>PO no.</th><th>DR no. / date</th><th class="num">VAT-ex</th><th class="num">Total</th><th>Status</th></tr></thead><tbody>
+  <div style="padding-top:12px">${extra}</div>
+  <div class="tbl-wrap"><table><thead><tr>${pick ? `<th><input type="checkbox" id="sel-all" aria-label="Select all" ${rows.length && rows.every(r => S.sel.has(r.id)) ? "checked" : ""}></th>` : ""}<th>Submitted</th><th>Supplier</th><th>Invoice no. / date</th><th>PO no.</th><th>DR no. / date</th><th class="num">VAT-ex</th><th class="num">Total</th><th>Status</th>${showRel ? "<th>Release / payment</th>" : ""}</tr></thead><tbody>
   ${rows.map(i => `<tr class="click" data-open="${esc(i.id)}" tabindex="0">
+    ${pick ? `<td data-nopen><input type="checkbox" data-sel="${esc(i.id)}" aria-label="Select ${esc(i.invoice_no)}" ${S.sel.has(i.id) ? "checked" : ""}></td>` : ""}
     <td class="small mono">${fmtDT(i.created_at)}</td>
     <td><b>${esc(i.company_name)}</b><div class="small muted mono">${esc(i.vendor_code)}</div></td>
     <td class="mono">${esc(i.invoice_no)}<div class="small muted">${fmtDate(i.invoice_date)}</div></td>
     <td class="mono">${esc(i.po_no)}</td>
     <td class="mono">${esc(i.dr_no)}<div class="small muted">${fmtDate(i.dr_date)}</div></td>
-    <td class="num">${peso(i.vatex_amount)}</td><td class="num">${peso(i.total_amount)}</td><td>${pill(i.status)}</td></tr>`).join("") || `<tr><td colspan="8" class="empty">${S.loaded.invoices ? "Nothing here." : "Loading…"}</td></tr>`}
+    <td class="num">${peso(i.vatex_amount)}</td><td class="num">${peso(i.total_amount)}</td><td>${pill(i.status)}</td>
+    ${showRel ? `<td data-nopen>${releaseCell(i, false)}</td>` : ""}</tr>`).join("") || `<tr><td colspan="10" class="empty">${S.loaded.invoices ? "Nothing here." : "Loading…"}</td></tr>`}
   </tbody></table></div></section>`;
 }
+async function bulkSchedule() {
+  const fri = $("#bulk-fri").value; const ids = [...S.sel];
+  if (!ids.length || !fri) return;
+  const btn = $("#bulk-go"); btn.disabled = true; btn.textContent = "Scheduling…";
+  let ok = 0; const failed = [];
+  for (const id of ids) {
+    const inv = S.invoices.find(i => i.id === id); if (!inv) continue;
+    const { data, error } = await S.sb.from("invoices").update({ status: "scheduled", release_date: fri, release_amount: inv.total_amount, release_note: null }).eq("id", id).select().single();
+    if (error) failed.push(inv.invoice_no); else { ok++; Object.assign(inv, data); S.sel.delete(id); }
+  }
+  toast(`${ok} invoice${ok === 1 ? "" : "s"} scheduled for ${fmtFri(fri)}` + (failed.length ? ` · failed: ${failed.join(", ")}` : ""));
+  render();
+}
 function exportCSV() {
-  const rows = S.invoices.filter(i => (S.filter === "all" || i.status === S.filter) && invMatches(i));
+  const rows = queueRows();
   const q = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
-  const head = ["Status", "Vendor Code", "Supplier", "Invoice No", "Invoice Date", "PO No", "VAT-Exclusive Amount", "VAT", "Total Amount", "DR No", "DR Date", "Submitted", "Return Reason", "Paid Date", "Payment Ref"];
-  const lines = [head.join(",")].concat(rows.map(i => [STATUS[i.status]?.label, i.vendor_code, i.company_name, i.invoice_no, i.invoice_date, i.po_no, i.vatex_amount, (Number(i.total_amount) - Number(i.vatex_amount)).toFixed(2), i.total_amount, i.dr_no, i.dr_date, i.created_at, i.return_reason, i.paid_date, i.payment_ref].map(q).join(",")));
+  const head = ["Status", "Vendor Code", "Supplier", "Invoice No", "Invoice Date", "PO No", "VAT-Exclusive Amount", "VAT", "Total Amount", "DR No", "DR Date", "Submitted", "Check Release Date", "Release Amount", "Release Note", "Paid Date", "Payment Ref", "Return Reason"];
+  const lines = [head.join(",")].concat(rows.map(i => [STATUS[i.status]?.label, i.vendor_code, i.company_name, i.invoice_no, i.invoice_date, i.po_no, i.vatex_amount, (Number(i.total_amount) - Number(i.vatex_amount)).toFixed(2), i.total_amount, i.dr_no, i.dr_date, i.created_at, i.release_date, i.release_amount, i.release_note, i.paid_date, i.payment_ref, i.return_reason].map(q).join(",")));
   const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `flexo-invoices-${S.filter}-${todayISO()}.csv`;
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
@@ -406,8 +468,9 @@ async function renderDrawer() {
   if (dupDr.length) notes.push(`DR ${esc(inv.dr_no)} also appears on invoice ${dupDr.map(o => esc(o.invoice_no)).join(", ")}.`);
   if (Math.abs(vatPct - 12) > 0.5) notes.push(`VAT works out to ${vatPct.toFixed(2)}% of the VAT-exclusive amount (normally 12%).`);
   const acts = {
-    submitted: `<button class="btn ok" id="a-approve">Approve for payment</button><button class="btn danger" id="a-return">Return to supplier…</button>`,
-    approved: `<button class="btn primary" id="a-paid">Mark as paid…</button><button class="btn" id="a-back">Move back to review</button><button class="btn danger" id="a-return">Return to supplier…</button>`,
+    submitted: `<button class="btn ok" id="a-approve">Mark as OK</button><button class="btn danger" id="a-return">Return to supplier…</button>`,
+    approved: `<button class="btn primary" id="a-schedule">Schedule check release…</button><button class="btn" id="a-back">Move back to review</button><button class="btn danger" id="a-return">Return to supplier…</button>`,
+    scheduled: `<button class="btn primary" id="a-paid">Mark as paid…</button><button class="btn" id="a-schedule">Change schedule…</button><button class="btn" id="a-unsched">Unschedule</button><button class="btn danger" id="a-return">Return to supplier…</button>`,
     returned: `<button class="btn" id="a-back">Reopen for review</button>`,
     paid: `<span class="small muted">Paid — no further actions.</span>`,
   }[inv.status];
@@ -418,13 +481,14 @@ async function renderDrawer() {
     <div class="drawer-b">
       <div class="stack">
         <div class="preview filebox" id="pv"><div class="ph"><div class="spinner"></div></div></div>
-        <button class="btn sm" id="d-file">Open file in new tab</button>
+        <button class="btn sm" id="d-file">Open invoice file in new tab</button>
         <div class="panel"><div class="panel-b"><div class="eyebrow" style="margin-bottom:8px">History</div><ul class="history" id="hist"><li class="muted">Loading…</li></ul></div></div>
       </div>
       <div class="stack">
         ${notes.length ? `<div class="note warn">${notes.map(n => `<div>⚠ ${n}</div>`).join("")}</div>` : ""}
         ${inv.status === "returned" ? `<div class="note bad">Return reason: ${esc(inv.return_reason)}</div>` : ""}
-        ${inv.status === "paid" ? `<div class="note ok">Paid ${fmtDate(inv.paid_date)} · Ref <span class="mono">${esc(inv.payment_ref)}</span></div>` : ""}
+        ${inv.status === "scheduled" ? `<div class="note ok">Check release <b>${fmtFri(inv.release_date)}</b> · <span class="mono">${peso(inv.release_amount)}</span>${inv.release_note ? ` · ${esc(inv.release_note)}` : ""}</div>` : ""}
+        ${inv.status === "paid" ? `<div class="note ok row">Paid ${fmtDate(inv.paid_date)} · <span class="mono">${peso(inv.release_amount ?? inv.total_amount)}</span> · Ref <span class="mono">${esc(inv.payment_ref)}</span>${inv.proof_path ? `<span style="flex:1"></span><button class="btn sm" id="d-proof">View proof of payment</button>` : ""}</div>` : ""}
         <div class="panel"><div class="panel-b"><dl class="kv" style="margin:0">
           <div><dt>Supplier</dt><dd>${esc(inv.company_name)} <span class="mono small muted">${esc(inv.vendor_code)}</span></dd></div>
           <div><dt>Invoice number</dt><dd class="mono">${esc(inv.invoice_no)}</dd></div>
@@ -438,7 +502,7 @@ async function renderDrawer() {
           <div><dt>Submitted</dt><dd>${fmtDT(inv.created_at)}</dd></div>
           <div><dt>File</dt><dd class="small">${esc(inv.file_name)}</dd></div>
         </dl></div></div>
-        <div class="note">Check the typed values against the attached invoice and SAP (PO, GRPO/DR) before approving.</div>
+        ${inv.status === "submitted" ? `<div class="note">Check the typed values against the attached invoice and SAP (PO, GRPO/DR), then mark it OK.</div>` : ""}
         <div class="panel"><div class="panel-b stack"><div class="row">${acts}</div><div id="d-action"></div></div></div>
       </div>
     </div>
@@ -446,6 +510,7 @@ async function renderDrawer() {
   $("#dbg").onclick = $("#dclose").onclick = () => { S.openId = null; renderDrawer(); };
   $("#dclose").focus();
   $("#d-file").onclick = () => openFile(inv);
+  if ($("#d-proof")) $("#d-proof").onclick = () => openStored(inv.proof_path);
   bindDrawerActions(inv);
   // file preview + history
   S.sb.storage.from(BUCKET).createSignedUrl(inv.file_path, 600).then(({ data, error }) => {
@@ -455,7 +520,7 @@ async function renderDrawer() {
   });
   S.sb.from("invoice_events").select("*").eq("invoice_id", inv.id).order("at", { ascending: false }).then(({ data, error }) => {
     const h = $("#hist"); if (!h || S.openId !== inv.id) return;
-    const label = { submitted: "Submitted", approved: "Approved for payment", returned: "Returned to supplier", paid: "Marked paid" };
+    const label = { submitted: "Submitted", approved: "Marked OK", scheduled: "Scheduled check release", rescheduled: "Changed check release", returned: "Returned to supplier", paid: "Marked paid" };
     h.innerHTML = error ? `<li class="muted">History not available.</li>` : (data || []).map(e => `<li><time>${fmtDT(e.at)}</time><span><b>${esc(e.actor_name)}</b> — ${esc(label[e.action] || e.action)}${e.note ? `: ${esc(e.note)}` : ""}</span></li>`).join("") || `<li class="muted">—</li>`;
   });
 }
@@ -463,25 +528,49 @@ function bindDrawerActions(inv) {
   const act = $("#d-action");
   const update = async (patch, msg) => {
     const { data, error } = await S.sb.from("invoices").update(patch).eq("id", inv.id).select().single();
-    if (error) { toast(friendly(error)); return; }
+    if (error) { toast(friendly(error)); return false; }
     const k = S.invoices.findIndex(i => i.id === inv.id); if (k >= 0) S.invoices[k] = data;
-    toast(msg); render();
+    toast(msg); render(); return true;
   };
-  const confirmBox = (html, onOk) => {
-    act.innerHTML = `<div class="inline-conf">${html}<button class="btn primary" id="c-ok">Confirm</button><button class="btn ghost" id="c-cancel">Cancel</button></div>`;
+  const confirmBox = (html, onOk, okLabel = "Confirm") => {
+    act.innerHTML = `<div class="inline-conf">${html}<button class="btn primary" id="c-ok">${okLabel}</button><button class="btn ghost" id="c-cancel">Cancel</button></div>`;
     $("#c-cancel").onclick = () => (act.innerHTML = "");
     $("#c-ok").onclick = onOk;
-    const first = $("input", act); if (first) first.focus();
+    const first = $("input,select", act); if (first) first.focus();
   };
-  if ($("#a-approve")) $("#a-approve").onclick = () => update({ status: "approved" }, "Approved for payment");
+  if ($("#a-approve")) $("#a-approve").onclick = () => update({ status: "approved" }, "Marked as OK — ready to schedule");
   if ($("#a-back")) $("#a-back").onclick = () => update({ status: "submitted" }, "Moved back to review");
+  if ($("#a-unsched")) $("#a-unsched").onclick = () => update({ status: "approved" }, "Schedule removed");
   if ($("#a-return")) $("#a-return").onclick = () => confirmBox(
     `<div class="field" style="flex:1;min-width:220px"><label for="c-reason">Reason (shown to the supplier)</label><input class="input" id="c-reason"></div>`,
     () => { const r = $("#c-reason").value.trim(); if (!r) return toast("Enter a reason."); update({ status: "returned", return_reason: r }, "Returned to supplier"); });
+  if ($("#a-schedule")) $("#a-schedule").onclick = () => confirmBox(
+    `<div class="field"><label for="c-fri">Check release (Friday)</label><select class="input" id="c-fri">${fridayOptions(inv.status === "scheduled" ? inv.release_date : null)}</select></div>
+     <div class="field"><label for="c-amt">Amount to be released (₱)</label><input class="input num" id="c-amt" inputmode="decimal" value="${Number(inv.release_amount ?? inv.total_amount).toFixed(2)}" style="width:150px"></div>
+     <div class="field" style="flex:1;min-width:160px"><label for="c-note">Note to supplier (optional)</label><input class="input" id="c-note" placeholder="e.g. less 1% EWT" value="${esc(inv.release_note || "")}"></div>`,
+    () => {
+      const a = num($("#c-amt").value);
+      if (a == null || a <= 0) return toast("Enter the amount to be released.");
+      if (a > Number(inv.total_amount)) return toast("The release amount can't be more than the invoice total.");
+      update({ status: "scheduled", release_date: $("#c-fri").value, release_amount: a, release_note: $("#c-note").value.trim() || null }, `Check release set for ${fmtFri($("#c-fri").value)}`);
+    }, "Save schedule");
   if ($("#a-paid")) $("#a-paid").onclick = () => confirmBox(
-    `<div class="field"><label for="c-date">Payment date</label><input class="input" type="date" id="c-date" value="${todayISO()}"></div>
-     <div class="field" style="flex:1;min-width:180px"><label for="c-ref">Check / transfer ref. or SAP payment no.</label><input class="input mono" id="c-ref"></div>`,
-    () => { const ref = $("#c-ref").value.trim(), d = $("#c-date").value; if (!d || !ref) return toast("Enter the payment date and reference."); update({ status: "paid", paid_date: d, payment_ref: ref }, "Marked as paid"); });
+    `<div class="field"><label for="c-date">Payment date</label><input class="input" type="date" id="c-date" value="${inv.release_date && inv.release_date <= todayISO() ? inv.release_date : todayISO()}" max="${todayISO()}"></div>
+     <div class="field" style="min-width:170px"><label for="c-ref">Check no. / transfer ref.</label><input class="input mono" id="c-ref"></div>
+     <div class="field" style="flex:1;min-width:220px"><label for="c-proof">Proof of payment (PDF, JPG, PNG)</label><input class="input" type="file" id="c-proof" accept="application/pdf,image/jpeg,image/png"></div>`,
+    async () => {
+      const ref = $("#c-ref").value.trim(), d = $("#c-date").value, f = $("#c-proof").files[0];
+      if (!d || !ref) return toast("Enter the payment date and check / reference no.");
+      if (!f) return toast("Attach the proof of payment.");
+      if (!FILE_TYPES.includes(f.type)) return toast("Proof must be a PDF, JPG or PNG.");
+      if (f.size > MAX_FILE) return toast("Proof file is larger than 10 MB.");
+      const btn = $("#c-ok"); btn.disabled = true; btn.textContent = "Uploading…";
+      const path = `payments/${inv.id}/${Date.now()}-${f.name.replace(/[^A-Za-z0-9._-]/g, "_").slice(-80) || "proof"}`;
+      const up = await S.sb.storage.from(BUCKET).upload(path, f, { contentType: f.type, upsert: false });
+      if (up.error) { toast(friendly(up.error)); btn.disabled = false; btn.textContent = "Mark paid"; return; }
+      const done = await update({ status: "paid", paid_date: d, payment_ref: ref, proof_path: path, proof_name: f.name }, "Marked as paid");
+      if (!done) { await S.sb.storage.from(BUCKET).remove([path]); if (btn.isConnected) { btn.disabled = false; btn.textContent = "Mark paid"; } }
+    }, "Mark paid");
 }
 
 // ---------- staff: supplier accounts ----------
@@ -551,7 +640,12 @@ function bindView() {
   $$("[data-chip]", app).forEach(b => (b.onclick = () => { S.filter = b.dataset.chip; render(); }));
   if ($("#q")) $("#q").oninput = e => { S.q = e.target.value; clearTimeout(bindView.t); bindView.t = setTimeout(render, 200); };
   if ($("#export")) $("#export").onclick = exportCSV;
-  $$("[data-open]", app).forEach(r => { const open = () => { S.openId = r.dataset.open; renderDrawer(); }; r.onclick = open; r.onkeydown = e => { if (e.key === "Enter") open(); }; });
+  $$("[data-open]", app).forEach(r => { const open = e => { if (e && e.target.closest("[data-nopen]")) return; S.openId = r.dataset.open; renderDrawer(); }; r.onclick = open; r.onkeydown = e => { if (e.key === "Enter" && e.target === r) open(); }; });
+  $$("[data-proof]", app).forEach(b => (b.onclick = e => { e.stopPropagation(); const i = S.invoices.find(x => x.id === b.dataset.proof); if (i && i.proof_path) openStored(i.proof_path); }));
+  const selCount = () => { if ($("#sel-n")) $("#sel-n").textContent = S.sel.size; if ($("#bulk-go")) $("#bulk-go").disabled = !S.sel.size; };
+  $$("[data-sel]", app).forEach(c => (c.onchange = () => { c.checked ? S.sel.add(c.dataset.sel) : S.sel.delete(c.dataset.sel); selCount(); }));
+  if ($("#sel-all")) $("#sel-all").onchange = e => { $$("[data-sel]", app).forEach(c => { c.checked = e.target.checked; c.checked ? S.sel.add(c.dataset.sel) : S.sel.delete(c.dataset.sel); }); selCount(); };
+  if ($("#bulk-go")) $("#bulk-go").onclick = bulkSchedule;
   $$("[data-acct]", app).forEach(b => (b.onclick = () => { S.acctFilter = b.dataset.acct; render(); }));
   $$("[data-do]", app).forEach(b => (b.onclick = () => accountAction(b.closest("tr"), b.dataset.do)));
 }
