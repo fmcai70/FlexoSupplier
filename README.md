@@ -112,6 +112,42 @@ that nobody can edit.
   `@flexo.com.ph` emails, and an admin must still approve it.
 - Share the staff link only inside Flexo. Search engines are asked not to list it.
 
+### Staff sign-in protection
+Staff powers need a **strong login**, and the database enforces this (`strong_login()` in
+`supabase/schema.sql`). A staff or admin account signed in with only a password can't see or change
+anything.
+
+| How staff sign in | What they need |
+|---|---|
+| **Sign in with Microsoft 365** | Their Flexo work account. Microsoft applies Flexo's own sign-in protection |
+| Email + password | Plus a **6-digit code** from Microsoft or Google Authenticator. The portal walks them through setup (QR code) the first time |
+
+⚠️ Microsoft sign-in counts as strong only if **Microsoft 365 itself requires two-step sign-in** (MFA,
+Security defaults or Conditional Access). Ask IT to confirm this is on for all staff.
+
+**Lost phone / new phone:** an admin runs this in the Supabase SQL Editor, and the person sets up a
+new code at their next sign-in:
+```sql
+delete from auth.mfa_factors where user_id = (select id from auth.users where email = 'name@flexo.com.ph');
+```
+
+**Set up "Sign in with Microsoft 365" (IT, one time):**
+1. **Azure portal → Microsoft Entra ID → App registrations → New registration**
+   - Name: `Flexo Supplier Portal – staff sign-in`
+   - Accounts: **this organizational directory only** (single tenant)
+   - Redirect URI: **Web**, `https://<project-ref>.supabase.co/auth/v1/callback`
+2. In the new app, go to **Certificates & secrets → New client secret** and copy the secret's **Value**.
+   Also note the **Application (client) ID** and **Directory (tenant) ID** on the Overview page.
+3. Recommended: under **Token configuration → Add optional claim → ID**, tick `email` and `xms_edov`.
+4. **Supabase → Authentication → Sign In / Providers → Azure**: enable it. Paste the client ID and the
+   secret value, and set **Azure Tenant URL** to `https://login.microsoftonline.com/<tenant-id>`. This
+   allows only Flexo accounts. Save.
+5. **GitHub → Settings → Secrets and variables → Actions → Variables**: add `MS_LOGIN` = `true`, then
+   run the **Deploy portal to GitHub Pages** workflow. The Microsoft button appears on the staff page.
+6. The first time someone signs in with Microsoft, a **staff request** is created. Approve it under
+   **Accounts**. If they already had a password account, the Microsoft sign-in may show up as a
+   separate account to approve.
+
 ### 2. Create the first admin
 1. Open the **staff page** and choose **Request access** with your own Flexo email. You can also
    use any account that already exists.
@@ -119,7 +155,8 @@ that nobody can edit.
    ```sql
    update public.profiles set role = 'admin', status = 'approved' where email = 'your.name@flexo.com.ph';
    ```
-3. Sign out and sign in again on the staff page. You'll see the **Invoices** and **Accounts** tabs.
+3. Sign out and sign in again on the staff page. Set up the 6-digit code when asked (or use Microsoft
+   sign-in), and you'll see the **Invoices** and **Accounts** tabs.
 
 Other staff choose **Request access** on the staff page. An admin approves them under **Accounts**; the
 role is already set to `staff` for these requests.

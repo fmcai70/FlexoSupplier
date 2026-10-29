@@ -43,14 +43,24 @@ alter table public.profiles drop constraint if exists profiles_requested_role_ch
 alter table public.profiles add  constraint profiles_requested_role_check check (requested_role in ('supplier', 'staff'));
 
 -- Helper checks used by the policies (security definer so they can read profiles).
+-- Staff powers need a strong login: password + authenticator code (aal2), or
+-- "Sign in with Microsoft 365" (amr method 'oauth' — Azure is the only OAuth provider
+-- enabled, and Microsoft applies Flexo's own sign-in protection). A stolen password alone
+-- gives no staff rights.
+create or replace function public.strong_login() returns boolean
+language sql stable as $$
+  select coalesce(auth.jwt() ->> 'aal', '') = 'aal2'
+      or exists (select 1 from jsonb_array_elements(coalesce(auth.jwt() -> 'amr', '[]'::jsonb)) m
+                  where m ->> 'method' = 'oauth');
+$$;
 create or replace function public.is_staff() returns boolean
 language sql stable security definer set search_path = public as $$
-  select exists (select 1 from public.profiles
+  select public.strong_login() and exists (select 1 from public.profiles
                   where id = auth.uid() and role in ('staff', 'admin') and status = 'approved');
 $$;
 create or replace function public.is_admin() returns boolean
 language sql stable security definer set search_path = public as $$
-  select exists (select 1 from public.profiles
+  select public.strong_login() and exists (select 1 from public.profiles
                   where id = auth.uid() and role = 'admin' and status = 'approved');
 $$;
 create or replace function public.is_approved_supplier() returns boolean
@@ -76,11 +86,14 @@ begin
   values (
     new.id,
     coalesce(new.email, ''),
-    left(coalesce(new.raw_user_meta_data ->> 'company_name', ''), 200),
+    left(coalesce(new.raw_user_meta_data ->> 'company_name',
+                  case when new.raw_app_meta_data ->> 'provider' = 'azure' then 'Flexo Manufacturing Corporation' end, ''), 200),
     left(coalesce(new.raw_user_meta_data ->> 'tin', ''), 40),
-    left(coalesce(new.raw_user_meta_data ->> 'contact_name', ''), 120),
+    left(coalesce(new.raw_user_meta_data ->> 'contact_name', new.raw_user_meta_data ->> 'full_name',
+                  new.raw_user_meta_data ->> 'name', ''), 120),
     left(coalesce(new.raw_user_meta_data ->> 'phone', ''), 40),
-    case when new.raw_user_meta_data ->> 'requested_role' = 'staff'
+    case when (new.raw_user_meta_data ->> 'requested_role' = 'staff'
+               or new.raw_app_meta_data ->> 'provider' = 'azure')      -- "Sign in with Microsoft 365"
           and lower(coalesce(new.email, '')) like '%@flexo.com.ph' then 'staff' else 'supplier' end
   )
   on conflict (id) do nothing;

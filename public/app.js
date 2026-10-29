@@ -33,8 +33,11 @@ const peso = v => v == null ? "—" : "₱ " + Number(v).toLocaleString("en-PH",
 const fmtDate = s => { if (!s) return "—"; const d = new Date(String(s).length === 10 ? s + "T00:00:00" : s); return isNaN(d) ? esc(s) : d.toLocaleDateString("en-PH", { year: "numeric", month: "short", day: "numeric" }); };
 const fmtDT = s => { if (!s) return "—"; const d = new Date(s); return isNaN(d) ? esc(s) : d.toLocaleString("en-PH", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" }); };
 const todayISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
-const isStaff = () => S.profile && ["staff", "admin"].includes(S.profile.role) && S.profile.status === "approved";
-const isAdmin = () => S.profile && S.profile.role === "admin" && S.profile.status === "approved";
+// Staff/admin by role. Staff powers also need a strong login (S.mfaOk): password + authenticator
+// code, or "Sign in with Microsoft 365". The database enforces the same rule (strong_login()).
+const isStaffRole = () => S.profile && ["staff", "admin"].includes(S.profile.role) && S.profile.status === "approved";
+const isStaff = () => isStaffRole() && S.mfaOk;
+const isAdmin = () => isStaff() && S.profile.role === "admin";
 const isSupplier = () => S.profile && S.profile.role === "supplier" && S.profile.status === "approved";
 
 function toast(msg) {
@@ -95,7 +98,7 @@ async function boot() {
     if (event === "PASSWORD_RECOVERY") S.recovering = true;
     const changed = (session?.user?.id || null) !== (S.session?.user?.id || null);
     S.session = session;
-    if (changed) { S.profile = null; S.tab = null; S.invoices = []; S.profiles = []; S.loaded = { invoices: false, profiles: false }; S.openId = null; setTimeout(loadProfile, 0); }
+    if (changed) { S.mfaOk = false; S.factors = []; S.enroll = null; S.profile = null; S.tab = null; S.invoices = []; S.profiles = []; S.loaded = { invoices: false, profiles: false }; S.openId = null; setTimeout(loadProfile, 0); }
     else render();
   });
   // onAuthStateChange fires INITIAL_SESSION right away, which loads the profile.
@@ -109,9 +112,20 @@ async function loadProfile() {
     if (data) { S.profile = data; break; }
     await new Promise(r => setTimeout(r, 700)); // profile row is created right after sign-up
   }
+  if (isStaffRole()) await checkMfa();
   render();
   if (isSupplier() || isStaff()) loadInvoices();
   if (isStaff()) { loadProfiles(); sendEmails(); }
+}
+async function checkMfa() {
+  S.mfaOk = false; S.factors = []; S.enroll = null;
+  const { data } = await S.sb.auth.mfa.getAuthenticatorAssuranceLevel();
+  const methods = (data?.currentAuthenticationMethods || []).map(m => m.method);
+  S.mfaOk = data?.currentLevel === "aal2" || methods.includes("oauth");
+  if (!S.mfaOk) {
+    const f = await S.sb.auth.mfa.listFactors();
+    S.factors = (f.data?.totp || []).filter(x => x.status === "verified");
+  }
 }
 async function loadInvoices() {
   const { data, error } = await S.sb.from("invoices").select("*").order("created_at", { ascending: false }).limit(2000);
@@ -133,8 +147,9 @@ function render() {
   if (!S.profile) { renderTabs([]); app.innerHTML = `<div class="empty" style="padding-top:80px"><div class="spinner" style="margin:0 auto 10px"></div>Loading your account…</div>`; return; }
   const p = S.profile;
   const staffRequest = p.role === "supplier" && p.requested_role === "staff" && p.status !== "approved";
-  if (MODE === "supplier" && (isStaff() || staffRequest)) { location.replace(STAFF_URL); return; }
-  if (MODE === "staff" && !isStaff() && !staffRequest) { renderTabs([]); app.innerHTML = wrongPageView(); bindWrongPage(); return; }
+  if (MODE === "supplier" && (isStaffRole() || staffRequest)) { location.replace(STAFF_URL); return; }
+  if (MODE === "staff" && !isStaffRole() && !staffRequest) { renderTabs([]); app.innerHTML = wrongPageView(); bindWrongPage(); return; }
+  if (isStaffRole() && !S.mfaOk) { renderTabs([]); app.innerHTML = mfaView(); bindMfa(); return; }
   if (!isSupplier() && !isStaff()) { renderTabs([]); app.innerHTML = notApprovedView(); bindNotApproved(); return; }
   const tabs = isStaff() ? [["invoices", "Invoices"], ["accounts", "Accounts"]] : [["submit", "Submit invoice"], ["mine", "My invoices"]];
   if (!S.tab || !tabs.some(t => t[0] === S.tab)) S.tab = tabs[0][0];
@@ -152,7 +167,7 @@ function renderWho() {
   const w = $("#who");
   if (!S.session) { w.innerHTML = ""; return; }
   const p = S.profile;
-  const label = p ? (isStaff() ? `${p.role === "admin" ? "Admin" : "Flexo staff"} · <b>${esc(p.contact_name || p.email)}</b>` : `<b>${esc(p.company_name || p.email)}</b>${p.vendor_code ? ` <span class="mono small muted">${esc(p.vendor_code)}</span>` : ""}`) : esc(S.session.user.email);
+  const label = p ? (isStaffRole() ? `${p.role === "admin" ? "Admin" : "Flexo staff"} · <b>${esc(p.contact_name || p.email)}</b>` : `<b>${esc(p.company_name || p.email)}</b>${p.vendor_code ? ` <span class="mono small muted">${esc(p.vendor_code)}</span>` : ""}`) : esc(S.session.user.email);
   w.innerHTML = `<span>${label}</span><button class="btn sm ghost" id="logout">Sign out</button>`;
   $("#logout").onclick = async () => { S.authMode = "signin"; S.recovering = false; S.lastSubmitted = null; await S.sb.auth.signOut(); };
 }
@@ -202,9 +217,12 @@ function staffAuthView(f) {
   const m = S.authMode === "signup" ? "request" : S.authMode;
   let body = "";
   if (m === "signin") body = `
+    ${cfg.microsoftLogin ? `<button class="btn primary" id="ms-go" style="justify-content:center;padding:10px">${MS_ICON} Sign in with Microsoft 365</button>
+    <div class="row small muted" style="gap:8px"><span class="hr" style="flex:1"></span>or with email and password<span class="hr" style="flex:1"></span></div>` : ""}
     ${f("au-email", "Flexo email", "email", 'autocomplete="email"')}
     ${f("au-pass", "Password", "password", 'autocomplete="current-password"')}
-    <button class="btn primary" id="au-go">Sign in</button>`;
+    <button class="btn${cfg.microsoftLogin ? "" : " primary"}" id="au-go">Sign in</button>
+    <p class="small muted" style="margin:0">With email and password you'll also enter a 6-digit code from an authenticator app.</p>`;
   else if (m === "request") body = `
     ${f("rq-name", "Full name", "text", 'autocomplete="name"')}
     ${f("rq-email", "Flexo email", "email", `autocomplete="email" placeholder="name${STAFF_DOMAIN}"`)}
@@ -227,6 +245,57 @@ function staffAuthView(f) {
       <div class="note ok" id="au-ok" hidden></div>
       <p class="small muted" style="margin:0">Supplier? <a href="${esc(SUPPLIER_URL)}">Go to the supplier portal</a></p>
     </div></div>`;
+}
+const MS_ICON = `<svg width="16" height="16" viewBox="0 0 21 21" aria-hidden="true"><rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/><rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg>`;
+
+// ---------- staff two-step login (authenticator app) ----------
+function mfaView() {
+  const p = S.profile;
+  if (S.factors.length) return `<div class="auth panel"><div class="panel-h"><h2>Two-step login</h2><span class="pill p-approved">Staff</span></div><div class="panel-b">
+    <p class="muted" style="margin:0">Hello ${esc(p.contact_name || p.email)}. Open your authenticator app and enter the 6-digit code for <b>Flexo Invoice Portal</b>.</p>
+    <div class="field"><label for="mfa-code">6-digit code</label><input class="input mono" id="mfa-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" style="font-size:20px;letter-spacing:.2em;text-align:center"></div>
+    <button class="btn primary" id="mfa-go">Verify</button><p class="err" id="mfa-err" hidden></p>
+    <p class="small muted" style="margin:0">Lost your phone? Ask an admin to reset your two-step login.</p></div></div>`;
+  const e = S.enroll;
+  return `<div class="auth panel" style="max-width:560px"><div class="panel-h"><h2>Set up two-step login</h2><span class="pill p-approved">Staff</span></div><div class="panel-b">
+    <p class="muted" style="margin:0">Staff accounts need a second step when signing in with a password. This takes one minute, once.</p>
+    <ol class="small" style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px">
+      <li>Install <b>Microsoft Authenticator</b> or <b>Google Authenticator</b> on your phone.</li>
+      <li>In the app, add an account and <b>scan this QR code</b>.</li>
+      <li>Enter the 6-digit code the app shows.</li></ol>
+    <div style="display:grid;place-items:center;padding:8px;background:#fff;border:1px solid var(--line);border-radius:10px;min-height:200px">${e ? `<img src="${esc(e.qr)}" alt="QR code for your authenticator app" width="200" height="200">` : `<div class="spinner"></div>`}</div>
+    ${e ? `<p class="small muted" style="margin:0">Can't scan? Enter this key in the app: <span class="mono" style="overflow-wrap:anywhere">${esc(e.secret)}</span></p>` : ""}
+    <div class="field"><label for="mfa-code">6-digit code</label><input class="input mono" id="mfa-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" style="font-size:20px;letter-spacing:.2em;text-align:center"></div>
+    <button class="btn primary" id="mfa-go" ${e ? "" : "disabled"}>Turn on two-step login</button><p class="err" id="mfa-err" hidden></p></div></div>`;
+}
+async function startEnroll() {
+  if (S.enroll || S.enrolling) return;
+  S.enrolling = true;
+  try {
+    // clear any half-finished setup from an earlier attempt
+    const f = await S.sb.auth.mfa.listFactors();
+    for (const x of (f.data?.all || []).filter(x => x.factor_type === "totp" && x.status !== "verified")) await S.sb.auth.mfa.unenroll({ factorId: x.id });
+    const { data, error } = await S.sb.auth.mfa.enroll({ factorType: "totp", friendlyName: "Flexo Invoice Portal " + Date.now().toString(36), issuer: "Flexo Invoice Portal" });
+    if (error) { toast(friendly(error)); return; }
+    S.enroll = { id: data.id, qr: data.totp.qr_code, secret: data.totp.secret };
+  } finally { S.enrolling = false; render(); }
+}
+function bindMfa() {
+  if (!S.factors.length && !S.enroll) startEnroll();
+  const go = async () => {
+    const code = ($("#mfa-code").value || "").replace(/\D/g, ""); const e = $("#mfa-err");
+    if (code.length !== 6) { e.textContent = "Enter the 6-digit code from your app."; e.hidden = false; return; }
+    const factorId = S.factors.length ? S.factors[0].id : S.enroll?.id;
+    if (!factorId) return;
+    $("#mfa-go").disabled = true;
+    const { error } = await S.sb.auth.mfa.challengeAndVerify({ factorId, code });
+    if (error) { e.textContent = /invalid|expired/i.test(error.message || "") ? "That code didn't work. Wait for a new code in the app and try again." : friendly(error); e.hidden = false; $("#mfa-go").disabled = false; return; }
+    toast(S.factors.length ? "Verified" : "Two-step login is on");
+    await loadProfile();
+  };
+  $("#mfa-go").onclick = go;
+  $("#mfa-code").addEventListener("keydown", ev => { if (ev.key === "Enter") go(); });
+  $("#mfa-code").focus();
 }
 function wrongPageView() {
   return `<div class="auth panel"><div class="panel-h"><h2>This page is for Flexo staff</h2></div><div class="panel-b">
@@ -284,6 +353,10 @@ function bindAuth() {
     } finally { if (btn.isConnected) btn.disabled = false; }
   };
   $("#au-go").onclick = go;
+  if ($("#ms-go")) $("#ms-go").onclick = async () => {
+    const { error } = await S.sb.auth.signInWithOAuth({ provider: "azure", options: { scopes: "openid email profile", redirectTo: STAFF_URL } });
+    if (error) err(friendly(error));
+  };
   $$("#app input").forEach(i => i.addEventListener("keydown", e => { if (e.key === "Enter") go(); }));
 }
 function resetView() {

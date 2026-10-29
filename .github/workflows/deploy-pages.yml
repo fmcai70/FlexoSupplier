@@ -2,6 +2,7 @@
 # Set these under Settings → Secrets and variables → Actions → Variables:
 #   SUPABASE_URL       https://<project-ref>.supabase.co
 #   SUPABASE_ANON_KEY  the project's anon / publishable key (public by design)
+#   MS_LOGIN           "true" once "Sign in with Microsoft 365" (Azure) is set up in Supabase (optional)
 name: Deploy portal to GitHub Pages
 
 on:
@@ -31,6 +32,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+          MS_LOGIN: ${{ vars.MS_LOGIN }}
         run: |
           if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
             echo "::error::Set the SUPABASE_URL and SUPABASE_ANON_KEY repository variables first."
@@ -40,6 +42,7 @@ jobs:
             const cfg = {
               supabaseUrl: process.env.SUPABASE_URL,
               supabaseAnonKey: process.env.SUPABASE_ANON_KEY,
+              microsoftLogin: process.env.MS_LOGIN === "true",
             };
             require("fs").writeFileSync("public/config.js", "window.FLEXO_CONFIG = " + JSON.stringify(cfg, null, 2) + ";\n");
           '
