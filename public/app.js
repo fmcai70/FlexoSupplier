@@ -510,14 +510,24 @@ function bindNotApproved() { $("#na-refresh").onclick = () => loadProfile(); }
 // ---------- supplier: submit ----------
 // Keep typed values if the phone reloads the page while the camera is open (the photo itself can't be kept).
 const draftKey = () => "fx_invoice_draft_" + (S.session?.user?.id || "");
-function saveDraft() { try { sessionStorage.setItem(draftKey(), JSON.stringify({ fields: S.draft.fields, fileName: S.draft.file?.name || "" })); } catch (e) {} }
+function saveDraft() { try { sessionStorage.setItem(draftKey(), JSON.stringify({ fields: S.draft.fields, fileName: S.draft.file?.name || "", fixing: S.draft.fixing || null })); } catch (e) {} }
 function restoreDraft() {
-  try { const d = JSON.parse(sessionStorage.getItem(draftKey()) || "null"); if (d && !Object.keys(S.draft.fields).length) { S.draft.fields = d.fields || {}; if (d.fileName && !S.draft.file) S.draft.lostFile = d.fileName; } } catch (e) {}
+  try { const d = JSON.parse(sessionStorage.getItem(draftKey()) || "null"); if (d && !Object.keys(S.draft.fields).length) { S.draft.fields = d.fields || {}; S.draft.fixing = d.fixing || null; if (d.fileName && !S.draft.file) S.draft.lostFile = d.fileName; } } catch (e) {}
 }
 function clearDraft() {
   if (S.draft.preview) URL.revokeObjectURL(S.draft.preview);
-  S.draft = { fields: {}, file: null, preview: null, busy: false, lostFile: "" };
+  S.draft = { fields: {}, file: null, preview: null, busy: false, lostFile: "", fixing: null };
   try { sessionStorage.removeItem(draftKey()); } catch (e) {}
+}
+// A returned invoice counts as handled once the same invoice number was submitted again.
+const resubmissionOf = inv => S.invoices.find(o => o.id !== inv.id && o.status !== "returned" && o.created_at > inv.created_at
+  && o.invoice_no.trim().toUpperCase() === inv.invoice_no.trim().toUpperCase());
+function startCorrection(inv) {
+  clearDraft();
+  S.draft.fields = { "f-invno": inv.invoice_no, "f-invdate": inv.invoice_date, "f-po": inv.po_no, "f-vatex": String(inv.vatex_amount),
+    "f-total": String(inv.total_amount), "f-dr": inv.dr_no, "f-drdate": inv.dr_date };
+  S.draft.fixing = { invoice_no: inv.invoice_no, reason: inv.return_reason };
+  S.lastSubmitted = null; S.tab = "submit"; saveDraft(); render(); scrollTo(0, 0);
 }
 function submitView() {
   if (S.lastSubmitted) {
@@ -545,7 +555,8 @@ function submitView() {
       <div class="flow-step"><span class="k">STEP 2</span><b>Attach the invoice</b><span>PDF or photo, max 10 MB</span></div>
       <div class="flow-step"><span class="k">STEP 3</span><b>Submit to Flexo</b><span>Track review and payment under My invoices</span></div>
     </div>
-    <section class="panel" style="max-width:860px"><div class="panel-h"><h2>Submit an invoice</h2><span class="small muted">All fields are required</span></div>
+    ${d.fixing ? `<div class="note warn" style="max-width:860px;margin-bottom:14px"><b>Correcting returned invoice ${esc(d.fixing.invoice_no)}.</b> Flexo's reason: <i>${esc(d.fixing.reason || "—")}</i><br>The details are filled in from your earlier submission. Fix what's needed, attach the corrected invoice file, then submit. <button type="button" class="linkbtn" id="fix-cancel">Cancel correction</button></div>` : ""}
+    <section class="panel" style="max-width:860px"><div class="panel-h"><h2>${d.fixing ? "Correct and resubmit invoice" : "Submit an invoice"}</h2><span class="small muted">All fields are required</span></div>
     <form class="panel-b stack" id="inv-form" novalidate>
       <div class="grid g3">
         ${f("f-invno", "Invoice number", "text", 'class="mono" autocomplete="off"')}
@@ -645,7 +656,9 @@ function mineView() {
     <td class="small mono">${fmtDT(i.created_at)}</td><td class="mono">${esc(i.invoice_no)}</td><td>${fmtDate(i.invoice_date)}</td><td class="mono">${esc(i.po_no)}</td>
     <td class="mono">${esc(i.dr_no)}<div class="small muted">${fmtDate(i.dr_date)}</div></td>
     <td class="num">${peso(i.total_amount)}<div class="small muted">VAT-ex ${peso(i.vatex_amount)}</div></td>
-    <td>${pill(i.status, true)}${i.status === "returned" ? `<div class="small" style="color:var(--bad)">${esc(i.return_reason)}</div><div class="small muted">Correct it and submit again.</div>` : ""}</td>
+    <td>${pill(i.status, true)}${i.status === "returned" ? `<div class="small" style="color:var(--bad)">${esc(i.return_reason)}</div>${resubmissionOf(i)
+      ? `<div class="small" style="color:var(--ok)">✓ Resubmitted ${fmtDT(resubmissionOf(i).created_at)}</div>`
+      : `<button class="btn sm primary" data-fix="${esc(i.id)}" style="margin-top:6px">Correct &amp; resubmit</button>`}` : ""}</td>
     <td>${releaseCell(i, true)}</td>
     <td><button class="btn sm" data-file="${esc(i.id)}">View invoice</button></td></tr>`).join("") || `<tr><td colspan="9" class="empty">${S.loaded.invoices ? "No invoices submitted yet." : "Loading…"}</td></tr>`}
   </tbody></table></div></section>`;
@@ -740,7 +753,10 @@ async function renderDrawer() {
   const dupInv = S.invoices.filter(o => o.id !== inv.id && o.vendor_code === inv.vendor_code && o.invoice_no.trim().toUpperCase() === inv.invoice_no.trim().toUpperCase());
   const dupDr = S.invoices.filter(o => o.id !== inv.id && o.vendor_code === inv.vendor_code && o.status !== "returned" && o.dr_no.trim().toUpperCase() === inv.dr_no.trim().toUpperCase());
   const notes = [];
-  if (dupInv.length) notes.push(`Same invoice no. was also submitted ${dupInv.length}× before (${dupInv.map(o => STATUS[o.status].label).join(", ")}).`);
+  const prevReturned = dupInv.filter(o => o.status === "returned" && o.created_at < inv.created_at);
+  const otherDup = dupInv.filter(o => !prevReturned.includes(o));
+  if (prevReturned.length && inv.status !== "returned") notes.push(`Resubmission: this invoice was returned before — reason: “${esc(prevReturned[prevReturned.length - 1].return_reason)}”. Check that it's corrected.`);
+  if (otherDup.length) notes.push(`Same invoice no. was also submitted ${otherDup.length}× (${otherDup.map(o => STATUS[o.status].label).join(", ")}).`);
   if (dupDr.length) notes.push(`DR ${esc(inv.dr_no)} also appears on invoice ${dupDr.map(o => esc(o.invoice_no)).join(", ")}.`);
   if (Math.abs(vatPct - 12) > 0.5) notes.push(`VAT works out to ${vatPct.toFixed(2)}% of the VAT-exclusive amount (normally 12%).`);
   const acts = {
@@ -924,6 +940,8 @@ function bindView() {
     if ($("#f-remove")) $("#f-remove").onclick = () => { if (S.draft.preview) URL.revokeObjectURL(S.draft.preview); S.draft.file = null; S.draft.preview = null; saveDraft(); render(); };
   }
   if ($("#new-inv")) $("#new-inv").onclick = () => { S.lastSubmitted = null; render(); };
+  $$("[data-fix]", app).forEach(b => (b.onclick = () => { const i = S.invoices.find(x => x.id === b.dataset.fix); if (i) startCorrection(i); }));
+  if ($("#fix-cancel")) $("#fix-cancel").onclick = () => { clearDraft(); render(); };
   if ($("#go-mine")) $("#go-mine").onclick = () => { S.lastSubmitted = null; S.tab = "mine"; render(); };
   $$("[data-file]", app).forEach(b => (b.onclick = () => { const i = S.invoices.find(x => x.id === b.dataset.file); if (i) openFile(i); }));
   if ($("#refresh")) $("#refresh").onclick = () => { if (S.tab === "accounts") loadProfiles(); else loadInvoices(); };
