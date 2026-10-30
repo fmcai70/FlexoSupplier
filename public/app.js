@@ -125,6 +125,7 @@ async function boot() {
     if (event === "PASSWORD_RECOVERY") S.recovering = true;
     const changed = (session?.user?.id || null) !== (S.session?.user?.id || null);
     S.session = session;
+    if (changed && session) { S.authNotice = ""; S.prefillEmail = ""; }
     if (changed) { S.mfaOk = false; S.factors = []; S.enroll = null; S.profile = null; S.tab = null; S.invoices = []; S.profiles = []; S.loaded = { invoices: false, profiles: false }; S.openId = null; setTimeout(loadProfile, 0); }
     else render();
   });
@@ -226,6 +227,7 @@ const aField = (id, label, type, extra = "", hint = "") => `<div class="field"><
 const aPass = (id, label, ac, side = "") => `<div class="field"><div class="label-row"><label for="${id}">${label}</label>${side}</div>
   <div class="pw-wrap"><input class="input" id="${id}" type="password" autocomplete="${ac}" required><button type="button" class="pw-toggle" data-pw="${id}" aria-label="Show password">Show</button></div></div>`;
 const aLink = (mode, text) => `<button type="button" class="linkbtn" data-mode="${mode}">${text}</button>`;
+const authNotice = () => S.authNotice ? `<div class="note ok" role="status" style="margin-bottom:16px">✓ ${esc(S.authNotice)}</div>` : "";
 const aMsgs = `<p class="err" id="au-err" role="alert" hidden></p><div class="note ok" id="au-ok" role="status" hidden></div>`;
 
 function authView() {
@@ -261,8 +263,9 @@ function authView() {
   return authShell(`
     <h2>Sign in</h2>
     <p class="lead">Welcome back. Sign in to submit invoices and check your payments.</p>
+    ${authNotice()}
     <form id="auth-form" class="stack" novalidate>
-      ${aField("au-email", "Email", "email", 'autocomplete="email"')}
+      ${aField("au-email", "Email", "email", `autocomplete="email" value="${esc(S.prefillEmail || "")}"`)}
       ${aPass("au-pass", "Password", "current-password", aLink("forgot", "Forgot password?"))}
       ${aMsgs}
       <button class="btn primary block" id="au-go" type="submit">Sign in</button>
@@ -296,10 +299,11 @@ function staffAuthView() {
   return authShell(`
     <h2>Staff sign in</h2>
     <p class="lead">Flexo Accounts Payable</p>
+    ${authNotice()}
     ${cfg.microsoftLogin ? `<button class="btn block ms-btn" id="ms-go" type="button">${MS_ICON} Sign in with Microsoft 365</button>
     <div class="or"><span>or</span></div>` : ""}
     <form id="auth-form" class="stack" novalidate>
-      ${aField("au-email", "Flexo email", "email", 'autocomplete="email"')}
+      ${aField("au-email", "Flexo email", "email", `autocomplete="email" value="${esc(S.prefillEmail || "")}"`)}
       ${aPass("au-pass", "Password", "current-password", aLink("forgot", "Forgot password?"))}
       ${aMsgs}
       <button class="btn primary block" id="au-go" type="submit">Sign in</button>
@@ -365,7 +369,7 @@ function wrongPageView() {
 }
 function bindWrongPage() { $("#wp-out").onclick = () => $("#logout").click(); }
 function bindAuth() {
-  $$("[data-mode]").forEach(b => (b.onclick = () => { S.authMode = b.dataset.mode; render(); }));
+  $$("[data-mode]").forEach(b => (b.onclick = () => { S.authMode = b.dataset.mode; S.authNotice = ""; render(); }));
   const err = m => { const e = $("#au-err"); e.textContent = m; e.hidden = !m; };
   const ok = m => { const e = $("#au-ok"); e.textContent = m; e.hidden = !m; };
   const v = id => ($("#" + id)?.value || "").trim();
@@ -419,7 +423,7 @@ function bindAuth() {
     if (error) err(friendly(error));
   };
   bindPwToggles();
-  const first = $("#auth-form input"); if (first && !matchMedia("(max-width: 860px)").matches) first.focus();
+  const first = $$("#auth-form input").find(i => !i.value); if (first && !matchMedia("(max-width: 860px)").matches) first.focus();
 }
 function bindPwToggles() {
   $$(".pw-toggle").forEach(b => (b.onclick = () => {
@@ -469,7 +473,11 @@ function bindReset() {
     }
     const { error } = await S.sb.auth.updateUser({ password: p });
     if (error) return fail(/aal2/i.test(error.message || "") ? "Please enter the 6-digit code from your authenticator app." : friendly(error));
-    S.recovering = false; S.resetFactor = undefined; toast("Password updated."); await loadProfile();
+    // End the one-time reset session and send them back to sign in with the new password.
+    S.prefillEmail = S.session?.user?.email || "";
+    S.authNotice = "Your password was changed. Please sign in with your new password.";
+    S.recovering = false; S.resetFactor = undefined; S.authMode = "signin";
+    await S.sb.auth.signOut();
   };
 }
 function notApprovedView() {
