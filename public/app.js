@@ -401,26 +401,48 @@ function bindPwToggles() {
   }));
 }
 function resetView() {
+  const needCode = !!S.resetFactor;
   return authShell(`
     <h2>Set a new password</h2>
     <p class="lead">Choose a new password for ${esc(S.session?.user?.email || "your account")}.</p>
+    ${S.resetFactor === undefined ? `<div class="empty"><div class="spinner" style="margin:0 auto"></div></div>` : `
     <form id="rp-form" class="stack" novalidate>
       ${aPass("rp-pass", "New password", "new-password", '<span class="hint">At least 8 characters</span>')}
       ${aPass("rp-pass2", "Confirm new password", "new-password")}
+      ${needCode ? `<div class="field"><label for="rp-code">6-digit code from your authenticator app</label>
+        <input class="input mono" id="rp-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" style="letter-spacing:.2em;text-align:center;font-size:18px" required>
+        <span class="hint">Your account uses two-step login, so the code is needed to change the password.</span></div>` : ""}
       <p class="err" id="rp-err" role="alert" hidden></p>
       <button class="btn primary block" id="rp-go" type="submit">Save password</button>
-    </form>`);
+    </form>`}`);
+}
+// Accounts with two-step login must confirm a 6-digit code before Supabase lets the password change.
+async function loadResetFactor() {
+  const [{ data: aal }, { data: f }] = await Promise.all([S.sb.auth.mfa.getAuthenticatorAssuranceLevel(), S.sb.auth.mfa.listFactors()]);
+  const verified = (f?.totp || []).filter(x => x.status === "verified");
+  S.resetFactor = aal?.currentLevel !== "aal2" && verified.length ? verified[0].id : null;
+  render();
 }
 function bindReset() {
+  if (S.resetFactor === undefined) { if (!S.resetLoading) { S.resetLoading = true; loadResetFactor().finally(() => (S.resetLoading = false)); } return; }
   bindPwToggles();
   $("#rp-form").onsubmit = async ev => {
     ev.preventDefault();
     const e = $("#rp-err"); const p = $("#rp-pass").value;
-    if (p.length < 8) { e.textContent = "Password must be at least 8 characters."; e.hidden = false; return; }
-    if (p !== $("#rp-pass2").value) { e.textContent = "The two passwords don't match."; e.hidden = false; return; }
+    const fail = m => { e.textContent = m; e.hidden = false; $("#rp-go").disabled = false; };
+    if (p.length < 8) return fail("Password must be at least 8 characters.");
+    if (p !== $("#rp-pass2").value) return fail("The two passwords don't match.");
+    $("#rp-go").disabled = true;
+    if (S.resetFactor) {
+      const code = ($("#rp-code").value || "").replace(/\D/g, "");
+      if (code.length !== 6) return fail("Enter the 6-digit code from your authenticator app.");
+      const v = await S.sb.auth.mfa.challengeAndVerify({ factorId: S.resetFactor, code });
+      if (v.error) return fail(/invalid|expired/i.test(v.error.message || "") ? "That code didn't work. Wait for a new code in the app and try again." : friendly(v.error));
+      S.resetFactor = null;
+    }
     const { error } = await S.sb.auth.updateUser({ password: p });
-    if (error) { e.textContent = friendly(error); e.hidden = false; return; }
-    S.recovering = false; toast("Password updated."); render();
+    if (error) return fail(/aal2/i.test(error.message || "") ? "Please enter the 6-digit code from your authenticator app." : friendly(error));
+    S.recovering = false; S.resetFactor = undefined; toast("Password updated."); await loadProfile();
   };
 }
 function notApprovedView() {
