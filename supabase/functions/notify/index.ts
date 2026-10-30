@@ -11,7 +11,7 @@
 // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided by Supabase automatically.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 
-const env = (k: string) => Deno.env.get(k) ?? "";
+const env = (k: string) => (Deno.env.get(k) ?? "").trim(); // ignore spaces pasted with a secret
 const PORTAL_URL = (env("PORTAL_URL") || "https://fmcai70.github.io/FlexoSupplier/").replace(/\/?$/, "/");
 const STAFF_URL = PORTAL_URL + "staff/";
 const cors = {
@@ -40,7 +40,10 @@ async function graphToken(): Promise<string> {
   return token.value;
 }
 async function sendMail(to: string, subject: string, html: string) {
-  const res = await fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(env("MAIL_SENDER"))}/sendMail`, {
+  const from = env("MAIL_SENDER").replace(/^mailto:/i, "");
+  if (!/^[^@\s]+@[^@\s]+$/.test(from)) throw new Error(`MAIL_SENDER secret is missing or not an email address (got "${from}")`);
+  if (!to) throw new Error("No recipient email address");
+  const res = await fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(from)}/sendMail`, {
     method: "POST",
     headers: { Authorization: `Bearer ${await graphToken()}`, "Content-Type": "application/json" },
     body: JSON.stringify({

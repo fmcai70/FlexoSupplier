@@ -7,7 +7,7 @@
 //   SEND_EMAIL_HOOK_SECRET   the secret shown when you create the hook (starts with "v1,whsec_")
 import { Webhook } from "npm:standardwebhooks@1.0.0";
 
-const env = (k: string) => Deno.env.get(k) ?? "";
+const env = (k: string) => (Deno.env.get(k) ?? "").trim(); // ignore spaces pasted with a secret
 
 let token: { value: string; exp: number } | null = null;
 async function graphToken(): Promise<string> {
@@ -23,7 +23,10 @@ async function graphToken(): Promise<string> {
   return token.value;
 }
 async function sendMail(to: string, subject: string, html: string) {
-  const res = await fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(env("MAIL_SENDER"))}/sendMail`, {
+  const from = env("MAIL_SENDER").replace(/^mailto:/i, "");
+  if (!/^[^@\s]+@[^@\s]+$/.test(from)) throw new Error(`MAIL_SENDER secret is missing or not an email address (got "${from}")`);
+  if (!to) throw new Error("No recipient email address");
+  const res = await fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(from)}/sendMail`, {
     method: "POST",
     headers: { Authorization: `Bearer ${await graphToken()}`, "Content-Type": "application/json" },
     body: JSON.stringify({ message: { subject, body: { contentType: "HTML", content: html }, toRecipients: [{ emailAddress: { address: to } }] }, saveToSentItems: false }),

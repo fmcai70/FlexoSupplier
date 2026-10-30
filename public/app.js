@@ -63,6 +63,7 @@ function friendly(err) {
   if (/rate limit|too many/i.test(m)) return "Too many attempts. Wait a few minutes and try again.";
   if (/invoices_no_duplicates|duplicate key/i.test(m)) return "You already submitted an invoice with this number.";
   if (/failed to fetch|network/i.test(m)) return "Can't reach the server. Check your internet connection.";
+  if (/hook|error sending .*email|smtp/i.test(m)) return "We couldn't send the email right now. Please try again in a few minutes, or contact Flexo Accounting.";
   return m || "Something went wrong. Please try again.";
 }
 
