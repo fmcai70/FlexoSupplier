@@ -96,8 +96,8 @@ that nobody can edit.
    - Keep **Email** enabled.
    - **Turn OFF "Confirm email"**. Flexo's approval step already confirms who each supplier is.
 3. Go to **Authentication → URL Configuration**:
-   - Set **Site URL** to `https://fmcai70.github.io/FlexoSupplier/`.
-   - Under **Redirect URLs**, add `https://fmcai70.github.io/FlexoSupplier/**`. The `**` covers both the
+   - Set **Site URL** to `https://app.flexo.com.ph/suppliers/`.
+   - Under **Redirect URLs**, add `https://app.flexo.com.ph/suppliers/**`. The `**` covers both the
      whole portal, so password-reset links work.
 
 ### Two sign-in pages
@@ -202,7 +202,7 @@ through the **send-auth-email** function, using Supabase's "Send Email" hook.
    | `MS_CLIENT_SECRET` | Graph app client secret |
    | `MAIL_SENDER` | Mailbox the emails come from, e.g. `ap-portal@flexo.com.ph` |
    | `AP_EMAIL` | Accounting's shared mailbox |
-   | `PORTAL_URL` | `https://fmcai70.github.io/FlexoSupplier/` |
+   | `PORTAL_URL` | `https://app.flexo.com.ph/suppliers/` |
 3. **Edge Functions → Deploy a new function → Via Editor**. Do this twice:
    - Name `notify`: paste `supabase/functions/notify/index.ts` and deploy.
    - Name `send-auth-email`: paste `supabase/functions/send-auth-email/index.ts` and deploy.

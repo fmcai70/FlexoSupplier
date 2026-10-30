@@ -7,12 +7,12 @@
 //   MS_TENANT_ID, MS_CLIENT_ID, MS_CLIENT_SECRET   Graph app (needs Mail.Send application permission)
 //   MAIL_SENDER    mailbox the app sends as, e.g. ap-portal@flexo.com.ph
 //   AP_EMAIL       Accounting's shared mailbox (new sign-ups and invoices)
-//   PORTAL_URL     https://fmcai70.github.io/FlexoSupplier/
+//   PORTAL_URL     https://app.flexo.com.ph/suppliers/
 // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided by Supabase automatically.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 
 const env = (k: string) => (Deno.env.get(k) ?? "").trim(); // ignore spaces pasted with a secret
-const PORTAL_URL = (env("PORTAL_URL") || "https://fmcai70.github.io/FlexoSupplier/").replace(/\/?$/, "/");
+const PORTAL_URL = (env("PORTAL_URL") || "https://app.flexo.com.ph/suppliers/").replace(/\/?$/, "/");
 const STAFF_URL = PORTAL_URL + "staff/";
 const cors = {
   "Access-Control-Allow-Origin": "*",
