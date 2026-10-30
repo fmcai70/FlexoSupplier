@@ -10,9 +10,12 @@ const cfg = window.FLEXO_CONFIG || {};
 const BUCKET = "invoice-files";
 const MAX_FILE = 10 * 1024 * 1024;
 const FILE_TYPES = ["application/pdf", "image/jpeg", "image/png"];
-// One sign-in page for suppliers and Flexo staff; the screens shown depend on the account's role.
+// Two sign-in pages share this code: suppliers at the site root, Flexo staff at /staff/.
+const MODE = window.PORTAL_MODE === "staff" ? "staff" : "supplier";
 const STAFF_DOMAIN = "@flexo.com.ph";
-const SITE_URL = new URL("./", location.href).href; // where email links return to
+const SUPPLIER_URL = new URL(MODE === "staff" ? "../" : "./", location.href).href;
+const STAFF_URL = new URL(MODE === "staff" ? "./" : "staff/", location.href).href;
+const SITE_URL = MODE === "staff" ? STAFF_URL : SUPPLIER_URL; // where email links return to
 
 const S = {
   sb: null, session: null, profile: null, recovering: false,
@@ -145,6 +148,9 @@ function render() {
   if (!S.session) { renderTabs([]); app.innerHTML = authView(); bindAuth(); renderDrawer(); return; }
   if (!S.profile) { renderTabs([]); app.innerHTML = `<div class="empty" style="padding-top:80px"><div class="spinner" style="margin:0 auto 10px"></div>Loading your account…</div>`; return; }
   const p = S.profile;
+  const staffRequest = p.role === "supplier" && p.requested_role === "staff" && p.status !== "approved";
+  if (MODE === "supplier" && (isStaffRole() || staffRequest)) { location.replace(STAFF_URL); return; }
+  if (MODE === "staff" && !isStaffRole() && !staffRequest) { renderTabs([]); app.innerHTML = wrongPageView(); bindWrongPage(); return; }
   if (isStaffRole() && !S.mfaOk) { renderTabs([]); app.innerHTML = mfaView(); bindMfa(); return; }
   if (!isSupplier() && !isStaff()) { renderTabs([]); app.innerHTML = notApprovedView(); bindNotApproved(); return; }
   const tabs = isStaff() ? [["invoices", "Invoices"], ["accounts", "Accounts"]] : [["submit", "Submit invoice"], ["mine", "My invoices"]];
@@ -175,13 +181,16 @@ function renderTabs(tabs) {
 
 // ---------- sign in / sign up / reset ----------
 function authShell(card) {
-  const points = ["Suppliers submit invoices with a scan or photo", "See when each invoice is checked, scheduled and paid", "Flexo staff review, schedule Friday check releases and record payments"];
+  const staff = MODE === "staff";
+  const points = staff
+    ? ["Review supplier invoices with the attached file", "Schedule Friday check releases in one go", "Record payments with proof of payment"]
+    : ["Submit your invoice with a scan or photo", "See when it's checked, scheduled and paid", "Know your check-release date and amount"];
   return `<div class="auth-split">
     <aside class="auth-side">
-      <div class="auth-brand"><div class="brand-mark" aria-hidden="true">F</div><div><b>Flexo Manufacturing Corporation</b><span>Supplier Invoice Portal</span></div></div>
-      <h1>Submit invoices and track your payments in one place.</h1>
+      <div class="auth-brand"><div class="brand-mark" aria-hidden="true">F</div><div><b>Flexo Manufacturing Corporation</b><span>${staff ? "Accounts Payable · staff" : "Supplier Invoice Portal"}</span></div></div>
+      <h1>${staff ? "Review, schedule and pay supplier invoices." : "Submit invoices and track your payments in one place."}</h1>
       <ul>${points.map(t => `<li>${t}</li>`).join("")}</ul>
-      <p class="auth-foot">Questions about an invoice? Contact Flexo Accounting.</p>
+      <p class="auth-foot">${staff ? "For Flexo staff only." : "Questions about an invoice? Contact Flexo Accounting."}</p>
     </aside>
     <section class="auth-main"><div class="auth-card">${card}</div></section>
   </div>`;
@@ -194,27 +203,10 @@ const aMsgs = `<p class="err" id="au-err" role="alert" hidden></p><div class="no
 
 function authView() {
   const m = S.authMode;
-  if (m === "signup" || m === "request") {
-    const staff = m === "request";
-    const who = `<div class="seg" role="group" aria-label="I am signing up as" style="margin-bottom:18px">
-        <button type="button" data-mode="signup" aria-pressed="${!staff}">Supplier</button>
-        <button type="button" data-mode="request" aria-pressed="${staff}">Flexo staff</button></div>`;
-    return authShell(staff ? `
-    <h2>Create an account</h2>
-    <p class="lead">Flexo staff: use your ${STAFF_DOMAIN} email. An admin approves each staff account.</p>
-    ${who}
-    <form id="auth-form" class="stack" novalidate>
-      ${aField("rq-name", "Full name", "text", 'autocomplete="name"')}
-      ${aField("rq-email", "Flexo email", "email", `autocomplete="email" placeholder="name${STAFF_DOMAIN}"`)}
-      ${aPass("rq-pass", "Password", "new-password", '<span class="hint">At least 8 characters</span>')}
-      ${aPass("rq-pass2", "Confirm password", "new-password")}
-      ${aMsgs}
-      <button class="btn primary block" id="au-go" type="submit">Request staff access</button>
-    </form>
-    <div class="auth-alt">Already have an account? ${aLink("signin", "Sign in")}</div>` : `
-    <h2>Create an account</h2>
-    <p class="lead">Flexo Accounting reviews each new supplier account. Once approved, you can submit invoices here.</p>
-    ${who}
+  if (MODE === "staff") return staffAuthView();
+  if (m === "signup") return authShell(`
+    <h2>Create a supplier account</h2>
+    <p class="lead">Flexo Accounting reviews each new account. Once approved, you can submit invoices here.</p>
     <form id="auth-form" class="stack" novalidate>
       <fieldset class="auth-group"><legend>Company</legend>
         ${aField("su-company", "Company name (as registered with BIR)", "text", 'autocomplete="organization"')}
@@ -230,7 +222,6 @@ function authView() {
       <button class="btn primary block" id="au-go" type="submit">Create account</button>
     </form>
     <div class="auth-alt">Already have an account? ${aLink("signin", "Sign in")}</div>`);
-  }
   if (m === "forgot") return authShell(`
     <h2>Reset your password</h2>
     <p class="lead">Enter the email you signed up with and we'll send you a link to set a new password.</p>
@@ -242,16 +233,52 @@ function authView() {
     <div class="auth-alt">${aLink("signin", "← Back to sign in")}</div>`);
   return authShell(`
     <h2>Sign in</h2>
-    <p class="lead">Welcome back. Suppliers and Flexo staff sign in here.</p>
-    ${cfg.microsoftLogin ? `<button class="btn block ms-btn" id="ms-go" type="button">${MS_ICON} Flexo staff: sign in with Microsoft 365</button>
-    <div class="or"><span>or</span></div>` : ""}
+    <p class="lead">Welcome back. Sign in to submit invoices and check your payments.</p>
     <form id="auth-form" class="stack" novalidate>
       ${aField("au-email", "Email", "email", 'autocomplete="email"')}
       ${aPass("au-pass", "Password", "current-password", aLink("forgot", "Forgot password?"))}
       ${aMsgs}
       <button class="btn primary block" id="au-go" type="submit">Sign in</button>
     </form>
-    <div class="auth-alt">New here? ${aLink("signup", "Create an account")}</div>`);
+    <div class="auth-alt">New supplier? ${aLink("signup", "Create an account")}</div>`);
+}
+function staffAuthView() {
+  const m = S.authMode === "signup" ? "request" : S.authMode;
+  const supplierLink = `<p class="auth-switch">Supplier? <a href="${esc(SUPPLIER_URL)}">Go to the supplier portal</a></p>`;
+  if (m === "request") return authShell(`
+    <h2>Request staff access</h2>
+    <p class="lead">Use your ${STAFF_DOMAIN} email. An admin approves each request.</p>
+    <form id="auth-form" class="stack" novalidate>
+      ${aField("rq-name", "Full name", "text", 'autocomplete="name"')}
+      ${aField("rq-email", "Flexo email", "email", `autocomplete="email" placeholder="name${STAFF_DOMAIN}"`)}
+      ${aPass("rq-pass", "Password", "new-password", '<span class="hint">At least 8 characters</span>')}
+      ${aPass("rq-pass2", "Confirm password", "new-password")}
+      ${aMsgs}
+      <button class="btn primary block" id="au-go" type="submit">Request access</button>
+    </form>
+    <div class="auth-alt">Already have access? ${aLink("signin", "Sign in")}</div>${supplierLink}`);
+  if (m === "forgot") return authShell(`
+    <h2>Reset your password</h2>
+    <p class="lead">Enter your Flexo email and we'll send you a link to set a new password.</p>
+    <form id="auth-form" class="stack" novalidate>
+      ${aField("fp-email", "Flexo email", "email", 'autocomplete="email"')}
+      ${aMsgs}
+      <button class="btn primary block" id="au-go" type="submit">Send reset link</button>
+    </form>
+    <div class="auth-alt">${aLink("signin", "← Back to sign in")}</div>${supplierLink}`);
+  return authShell(`
+    <h2>Staff sign in</h2>
+    <p class="lead">Flexo Accounts Payable</p>
+    ${cfg.microsoftLogin ? `<button class="btn block ms-btn" id="ms-go" type="button">${MS_ICON} Sign in with Microsoft 365</button>
+    <div class="or"><span>or</span></div>` : ""}
+    <form id="auth-form" class="stack" novalidate>
+      ${aField("au-email", "Flexo email", "email", 'autocomplete="email"')}
+      ${aPass("au-pass", "Password", "current-password", aLink("forgot", "Forgot password?"))}
+      ${aMsgs}
+      <button class="btn primary block" id="au-go" type="submit">Sign in</button>
+      <p class="small muted" style="margin:0;text-align:center">Next, you'll enter the 6-digit code from your authenticator app.</p>
+    </form>
+    <div class="auth-alt">Need access? ${aLink("request", "Request staff access")}</div>${supplierLink}`);
 }
 const MS_ICON = `<svg width="16" height="16" viewBox="0 0 21 21" aria-hidden="true"><rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/><rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg>`;
 
@@ -304,6 +331,12 @@ function bindMfa() {
   $("#mfa-code").addEventListener("keydown", ev => { if (ev.key === "Enter") go(); });
   $("#mfa-code").focus();
 }
+function wrongPageView() {
+  return `<div class="auth panel"><div class="panel-h"><h2>This page is for Flexo staff</h2></div><div class="panel-b">
+    <p class="muted" style="margin:0">You're signed in with a supplier account. Suppliers use the supplier portal.</p>
+    <div class="row"><a class="btn primary" href="${esc(SUPPLIER_URL)}">Go to the supplier portal</a><button class="btn" id="wp-out">Sign out</button></div></div></div>`;
+}
+function bindWrongPage() { $("#wp-out").onclick = () => $("#logout").click(); }
 function bindAuth() {
   $$("[data-mode]").forEach(b => (b.onclick = () => { S.authMode = b.dataset.mode; render(); }));
   const err = m => { const e = $("#au-err"); e.textContent = m; e.hidden = !m; };
@@ -355,7 +388,7 @@ function bindAuth() {
   };
   $("#auth-form").onsubmit = e => { e.preventDefault(); go(); };
   if ($("#ms-go")) $("#ms-go").onclick = async () => {
-    const { error } = await S.sb.auth.signInWithOAuth({ provider: "azure", options: { scopes: "openid email profile", redirectTo: SITE_URL } });
+    const { error } = await S.sb.auth.signInWithOAuth({ provider: "azure", options: { scopes: "openid email profile", redirectTo: STAFF_URL } });
     if (error) err(friendly(error));
   };
   bindPwToggles();
@@ -414,7 +447,7 @@ function bindReset() {
 }
 function notApprovedView() {
   const p = S.profile;
-  if (p.requested_role === "staff" && p.role === "supplier") {
+  if (MODE === "staff") {
     const t = { pending: ["Staff access requested", "An admin will review your request. Once approved, sign in again (or click Check again) to open the staff portal."], rejected: ["Staff access not approved", "An admin did not approve this request."], disabled: ["Access disabled", "This account has been disabled by an admin."] }[p.status] || ["Access not active", ""];
     return `<div class="auth panel"><div class="panel-h"><h2>${t[0]}</h2>${acctPill(p.status)}</div><div class="panel-b">
       <p class="muted" style="margin:0">${t[1]}</p>${p.status_note ? `<div class="note warn">Reason: ${esc(p.status_note)}</div>` : ""}
@@ -783,7 +816,7 @@ function accountsView() {
       ${p.status === "approved" ? `<button class="btn sm danger" data-do="disable">Disable</button>` : ""}
     </div>` : `<span class="small muted">${me ? "You" : ""}</span>`}</td></tr>`; }).join("") || `<tr><td colspan="7" class="empty">${S.loaded.profiles ? "No accounts here." : "Loading…"}</td></tr>`}
   </tbody></table></div>
-  <div class="panel-b"><div class="note">New staff choose <b>Create an account → Flexo staff</b> on the sign-in page with their ${STAFF_DOMAIN} email; an admin approves them here with role <b>staff</b>.</div></div></section>`;
+  <div class="panel-b"><div class="note">New staff request access on the staff page (<a href="${esc(STAFF_URL)}">${esc(STAFF_URL)}</a>) with their ${STAFF_DOMAIN} email; an admin approves them here with role <b>staff</b>.</div></div></section>`;
 }
 async function accountAction(tr, what) {
   const p = S.profiles.find(x => x.id === tr.dataset.pid); if (!p) return;

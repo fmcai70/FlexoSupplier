@@ -13,7 +13,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 
 const env = (k: string) => (Deno.env.get(k) ?? "").trim(); // ignore spaces pasted with a secret
 const PORTAL_URL = (env("PORTAL_URL") || "https://fmcai70.github.io/FlexoSupplier/").replace(/\/?$/, "/");
-const STAFF_URL = PORTAL_URL; // staff and suppliers share one sign-in page
+const STAFF_URL = PORTAL_URL + "staff/";
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info",

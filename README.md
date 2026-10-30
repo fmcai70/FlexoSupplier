@@ -100,14 +100,17 @@ that nobody can edit.
    - Under **Redirect URLs**, add `https://fmcai70.github.io/FlexoSupplier/**`. The `**` covers both the
      whole portal, so password-reset links work.
 
-### One sign-in page for everyone
-Suppliers and Flexo staff use the same address (`https://app.flexo.com.ph/suppliers/`). After signing in,
-each person sees the screens for their role.
-- **Create an account** offers **Supplier** (company details) or **Flexo staff** (name + `@flexo.com.ph`
-  email only).
-- A staff sign-up grants nothing by itself. The database only records "staff request" for `@flexo.com.ph`
-  emails, only Flexo emails can ever be staff or admin, and an admin must approve it.
-- The old `/staff/` link forwards to the main page.
+### Two sign-in pages
+| Who | Link | What's there |
+|---|---|---|
+| Suppliers | `https://app.flexo.com.ph/suppliers/` | Sign in, supplier **Create an account**, Forgot password |
+| Flexo staff | `https://app.flexo.com.ph/suppliers/staff/` | Staff sign in, **Request staff access** (only `@flexo.com.ph` emails), Forgot password |
+
+- Staff or admin who open the supplier page are sent to the staff page automatically.
+- A supplier who signs in on the staff page is told to use the supplier portal.
+- Asking for staff access grants nothing by itself. The database only records "staff request" for
+  `@flexo.com.ph` emails, only Flexo emails can ever be staff or admin, and an admin must approve it.
+- Share the staff link only inside Flexo. Search engines are asked not to list it.
 
 ### Staff sign-in protection
 Staff powers need a **strong login**, and the database enforces this (`strong_login()` in
@@ -143,22 +146,22 @@ delete from auth.mfa_factors where user_id = (select id from auth.users where em
    secret value, and set **Azure Tenant URL** to `https://login.microsoftonline.com/<tenant-id>`. This
    allows only Flexo accounts. Save.
 5. **GitHub → Settings → Secrets and variables → Actions → Variables**: add `MS_LOGIN` = `true`, then
-   run the **Deploy portal to GitHub Pages** workflow. The Microsoft button appears on the sign-in page.
+   run the **Deploy portal to GitHub Pages** workflow. The Microsoft button appears on the staff page.
 6. The first time someone signs in with Microsoft, a **staff request** is created. Approve it under
    **Accounts**. If they already had a password account, the Microsoft sign-in may show up as a
    separate account to approve.
 
 ### 2. Create the first admin
-1. On the sign-in page choose **Create an account → Flexo staff** with your own Flexo email. You can
+1. Open the **staff page** and choose **Request staff access** with your own Flexo email. You can
    also use any account that already exists.
 2. In the Supabase **SQL Editor**, run this with your own email:
    ```sql
    update public.profiles set role = 'admin', status = 'approved' where email = 'your.name@flexo.com.ph';
    ```
-3. Sign out and sign in again. Set up the 6-digit code when asked (or use Microsoft
+3. Sign out and sign in again on the staff page. Set up the 6-digit code when asked (or use Microsoft
    sign-in), and you'll see the **Invoices** and **Accounts** tabs.
 
-Other staff choose **Create an account → Flexo staff**. An admin approves them under **Accounts**; the
+Other staff choose **Request staff access** on the staff page. An admin approves them under **Accounts**; the
 role is already set to `staff` for these requests.
 
 ### 3. Approve suppliers
@@ -250,7 +253,7 @@ npx http-server public -p 8080                 # open http://localhost:8080
 | Path | What it is |
 |---|---|
 | `public/index.html`, `public/app.js`, `public/styles.css` | The portal (supplier page) |
-| `public/staff/index.html` | Forwards the old staff link to the main page |
+| `public/staff/index.html` | Staff sign-in page (same app in staff mode) |
 | `supabase/schema.sql` | Tables, security rules, file storage, history log, email queue |
 | `supabase/functions/notify` | Sends queued emails through Microsoft Graph |
 | `supabase/functions/send-auth-email` | Password-reset emails through Microsoft Graph (Send Email hook) |
