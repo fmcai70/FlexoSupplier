@@ -3,36 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="robots" content="noindex">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Flexo Invoice Portal — Staff</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
-<link rel="stylesheet" href="../styles.css">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Flexo Supplier Invoice Portal</title>
+<!-- The staff page was merged into the main sign-in page; keep old links and bookmarks working. -->
+<meta http-equiv="refresh" content="0; url=../">
+<script>location.replace(new URL("../", location.href).href + location.hash);</script>
 </head>
-<body>
-<div class="topbar">
-  <div class="wrap">
-    <div class="brand">
-      <div class="brand-mark" aria-hidden="true">F</div>
-      <div>
-        <h1>Supplier Invoice Portal</h1>
-        <div class="sub">Flexo Manufacturing Corporation · Accounts Payable — staff</div>
-      </div>
-    </div>
-    <nav class="tabs" id="tabs" role="tablist" hidden></nav>
-    <div class="who" id="who"></div>
-  </div>
-</div>
-<main class="wrap" id="app">
-  <div class="empty" style="padding-top:80px"><div class="spinner" style="margin:0 auto 10px"></div>Loading portal…</div>
-</main>
-<div id="drawerRoot"></div>
-<div id="toastRoot"></div>
-
-<script>window.PORTAL_MODE = "staff";</script>
-<script src="../config.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="../app.js"></script>
+<body style="font-family:system-ui,sans-serif;padding:24px">
+<p>The staff sign-in has moved. <a href="../">Continue to the portal</a>.</p>
 </body>
 </html>

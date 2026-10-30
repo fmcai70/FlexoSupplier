@@ -98,19 +98,16 @@ that nobody can edit.
 3. Go to **Authentication → URL Configuration**:
    - Set **Site URL** to `https://fmcai70.github.io/FlexoSupplier/`.
    - Under **Redirect URLs**, add `https://fmcai70.github.io/FlexoSupplier/**`. The `**` covers both the
-     supplier page and the staff page, so password-reset links return to the right one.
+     whole portal, so password-reset links work.
 
-### Two sign-in pages
-| Who | Link | What's there |
-|---|---|---|
-| Suppliers | `https://fmcai70.github.io/FlexoSupplier/` | Sign in, supplier **Sign up**, Forgot password |
-| Flexo staff | `https://fmcai70.github.io/FlexoSupplier/staff/` | Sign in, **Request access** (only `@flexo.com.ph` emails), Forgot password |
-
-- Staff or admin who open the supplier page are sent to the staff page automatically.
-- A supplier who signs in on the staff page is told to use the supplier portal.
-- Asking for staff access grants nothing by itself. The database only records "staff request" for
-  `@flexo.com.ph` emails, and an admin must still approve it.
-- Share the staff link only inside Flexo. Search engines are asked not to list it.
+### One sign-in page for everyone
+Suppliers and Flexo staff use the same address (`https://app.flexo.com.ph/suppliers/`). After signing in,
+each person sees the screens for their role.
+- **Create an account** offers **Supplier** (company details) or **Flexo staff** (name + `@flexo.com.ph`
+  email only).
+- A staff sign-up grants nothing by itself. The database only records "staff request" for `@flexo.com.ph`
+  emails, only Flexo emails can ever be staff or admin, and an admin must approve it.
+- The old `/staff/` link forwards to the main page.
 
 ### Staff sign-in protection
 Staff powers need a **strong login**, and the database enforces this (`strong_login()` in
@@ -146,22 +143,22 @@ delete from auth.mfa_factors where user_id = (select id from auth.users where em
    secret value, and set **Azure Tenant URL** to `https://login.microsoftonline.com/<tenant-id>`. This
    allows only Flexo accounts. Save.
 5. **GitHub → Settings → Secrets and variables → Actions → Variables**: add `MS_LOGIN` = `true`, then
-   run the **Deploy portal to GitHub Pages** workflow. The Microsoft button appears on the staff page.
+   run the **Deploy portal to GitHub Pages** workflow. The Microsoft button appears on the sign-in page.
 6. The first time someone signs in with Microsoft, a **staff request** is created. Approve it under
    **Accounts**. If they already had a password account, the Microsoft sign-in may show up as a
    separate account to approve.
 
 ### 2. Create the first admin
-1. Open the **staff page** and choose **Request access** with your own Flexo email. You can also
-   use any account that already exists.
+1. On the sign-in page choose **Create an account → Flexo staff** with your own Flexo email. You can
+   also use any account that already exists.
 2. In the Supabase **SQL Editor**, run this with your own email:
    ```sql
    update public.profiles set role = 'admin', status = 'approved' where email = 'your.name@flexo.com.ph';
    ```
-3. Sign out and sign in again on the staff page. Set up the 6-digit code when asked (or use Microsoft
+3. Sign out and sign in again. Set up the 6-digit code when asked (or use Microsoft
    sign-in), and you'll see the **Invoices** and **Accounts** tabs.
 
-Other staff choose **Request access** on the staff page. An admin approves them under **Accounts**; the
+Other staff choose **Create an account → Flexo staff**. An admin approves them under **Accounts**; the
 role is already set to `staff` for these requests.
 
 ### 3. Approve suppliers
@@ -219,23 +216,24 @@ through the **send-auth-email** function, using Supabase's "Send Email" hook.
 With CLI instead of the dashboard: `supabase functions deploy notify` and
 `supabase functions deploy send-auth-email --no-verify-jwt`.
 
-### Hosting on Hostinger (flexo.flexo.com.ph)
+### Hosting on Hostinger (app.flexo.com.ph/suppliers/)
 `.github/workflows/deploy-hostinger.yml` uploads `public/` to Hostinger by FTP on every push to `main`.
 It does nothing until the FTP secrets are set.
-1. **Hostinger hPanel → Files → FTP Accounts**: note the **FTP hostname/IP**, **username** and
-   **password** (reset it if you don't know it).
-2. **GitHub → Settings → Secrets and variables → Actions → Secrets**: add `FTP_SERVER`, `FTP_USERNAME`
-   and `FTP_PASSWORD`.
-3. **Actions → Deploy portal to Hostinger → Run workflow**.
-   - If it fails with a TLS/SSL error, add the variable `FTP_PROTOCOL` = `ftp`.
-   - If the files land in the wrong folder, set the variable `FTP_DIR` (default `public_html/`).
-4. **Connect the domain**: in hPanel open the website's "Domain isn't connected" **Check guide**, and add
-   the DNS record it shows. Usually that's an **A record** for `flexo` pointing to the Hostinger server IP,
-   added wherever flexo.com.ph's DNS is managed. Then turn on the free **SSL** (hPanel → Security → SSL).
-5. Point Supabase at the new address: in **Authentication → URL Configuration**, set the Site URL to
-   `https://flexo.flexo.com.ph/` and add `https://flexo.flexo.com.ph/**` to the Redirect URLs. In
-   **Edge Functions → Secrets**, set `PORTAL_URL` = `https://flexo.flexo.com.ph/`.
-6. When the Hostinger site works, you can switch off GitHub Pages (Settings → Pages).
+1. **DNS:** in DotPH, add an **A record** for `app` pointing to the Hostinger IP (`157.173.208.251`).
+   Then install the free **SSL** in hPanel → Security → SSL.
+2. **FTP:** in hPanel → Files → FTP Accounts, use the website's FTP account, or create one just for the
+   portal.
+3. **GitHub → Settings → Secrets and variables → Actions:**
+   - Secrets: `FTP_SERVER`, `FTP_USERNAME`, `FTP_PASSWORD`
+   - Variable `FTP_DIR`: the files go to `public_html/suppliers/` by default. If your FTP account already
+     starts inside `public_html`, set `FTP_DIR` = `suppliers/`.
+   - Variable `FTP_PROTOCOL` = `ftp`: only if the upload fails with a TLS/SSL error.
+4. **Actions → Deploy portal to Hostinger → Run workflow.**
+5. **Supabase:**
+   - Authentication → URL Configuration: Site URL `https://app.flexo.com.ph/suppliers/`, and add
+     `https://app.flexo.com.ph/suppliers/**` to the Redirect URLs.
+   - Edge Functions → Secrets: `PORTAL_URL` = `https://app.flexo.com.ph/suppliers/`
+6. When it works, switch off GitHub Pages (Settings → Pages).
 
 `public/.htaccess` forces HTTPS, sets basic security headers, and stops browsers from caching an old
 version.
@@ -252,7 +250,7 @@ npx http-server public -p 8080                 # open http://localhost:8080
 | Path | What it is |
 |---|---|
 | `public/index.html`, `public/app.js`, `public/styles.css` | The portal (supplier page) |
-| `public/staff/index.html` | Staff sign-in page (same app in staff mode) |
+| `public/staff/index.html` | Forwards the old staff link to the main page |
 | `supabase/schema.sql` | Tables, security rules, file storage, history log, email queue |
 | `supabase/functions/notify` | Sends queued emails through Microsoft Graph |
 | `supabase/functions/send-auth-email` | Password-reset emails through Microsoft Graph (Send Email hook) |

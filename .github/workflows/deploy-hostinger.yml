@@ -3,7 +3,8 @@
 #   Secrets:   FTP_SERVER, FTP_USERNAME, FTP_PASSWORD   (hPanel → Files → FTP Accounts)
 #   Variables: SUPABASE_URL, SUPABASE_ANON_KEY            (already set for GitHub Pages)
 #   Optional variables:
-#     FTP_DIR       folder on Hostinger, default "public_html/"
+#     FTP_DIR       folder on Hostinger, default "public_html/suppliers/"
+#                   (use "suppliers/" for an FTP account that already starts in public_html)
 #     FTP_PROTOCOL  "ftps" (default, encrypted) or "ftp" if Hostinger refuses ftps
 # Until FTP_SERVER is set this workflow does nothing.
 name: Deploy portal to Hostinger
@@ -63,4 +64,4 @@ jobs:
           password: ${{ secrets.FTP_PASSWORD }}
           protocol: ${{ vars.FTP_PROTOCOL || 'ftps' }}
           local-dir: ./public/
-          server-dir: ${{ vars.FTP_DIR || 'public_html/' }}
+          server-dir: ${{ vars.FTP_DIR || 'public_html/suppliers/' }}
