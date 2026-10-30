@@ -9,7 +9,32 @@
 const cfg = window.FLEXO_CONFIG || {};
 const BUCKET = "invoice-files";
 const MAX_FILE = 10 * 1024 * 1024;
-const FILE_TYPES = ["application/pdf", "image/jpeg", "image/png"];
+// Phone photos are often 5–20 MB, HEIC, or arrive without a file type. Turn any photo the
+// browser can open into a ~2000px JPEG (usually under 1 MB); PDFs pass through unchanged.
+async function prepareUpload(file) {
+  const name = file.name || "photo.jpg";
+  const ext = (name.split(".").pop() || "").toLowerCase();
+  if (file.type === "application/pdf" || ext === "pdf") {
+    if (file.size > MAX_FILE) throw new Error("The PDF is larger than 10 MB. Please upload a smaller scan.");
+    return new File([file], name, { type: "application/pdf" });
+  }
+  const isImage = (file.type || "").startsWith("image/") || ["jpg", "jpeg", "png", "heic", "heif", "webp"].includes(ext) || !file.type;
+  if (!isImage) throw new Error("Please choose a PDF or a photo (JPG or PNG).");
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+    const w = img.naturalWidth, h = img.naturalHeight, scale = Math.min(1, 2000 / Math.max(w, h));
+    const c = document.createElement("canvas"); c.width = Math.round(w * scale); c.height = Math.round(h * scale);
+    const ctx = c.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height); ctx.drawImage(img, 0, 0, c.width, c.height);
+    let q = 0.85, blob = null;
+    for (let k = 0; k < 5; k++) { blob = await new Promise(r => c.toBlob(r, "image/jpeg", q)); if (blob && blob.size <= MAX_FILE) break; q -= 0.15; }
+    if (!blob || blob.size > MAX_FILE) throw new Error("too big");
+    return new File([blob], name.replace(/\.[^.]*$/, "") + ".jpg", { type: "image/jpeg" });
+  } catch (e) {
+    throw new Error("This photo couldn't be read. Take the photo again, or on iPhone set Settings → Camera → Formats → Most Compatible. You can also upload a PDF.");
+  } finally { URL.revokeObjectURL(url); }
+}
+const fileSize = b => b >= 1048576 ? (b / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(b / 1024)) + " KB";
 // Two sign-in pages share this code: suppliers at the site root, Flexo staff at /staff/.
 const MODE = window.PORTAL_MODE === "staff" ? "staff" : "supplier";
 const STAFF_DOMAIN = "@flexo.com.ph";
@@ -23,6 +48,7 @@ const S = {
   invoices: [], profiles: [], loaded: { invoices: false, profiles: false },
   filter: "submitted", q: "", acctFilter: "pending",
   openId: null, lastSubmitted: null, sel: new Set(),
+  draft: { fields: {}, file: null, preview: null, busy: false, lostFile: "" }, // invoice form survives re-renders
 };
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -114,6 +140,7 @@ async function loadProfile() {
     await new Promise(r => setTimeout(r, 700)); // profile row is created right after sign-up
   }
   if (isStaffRole()) await checkMfa();
+  if (isSupplier()) restoreDraft();
   render();
   if (isSupplier() || isStaff()) loadInvoices();
   if (isStaff()) { loadProfiles(); sendEmails(); }
@@ -473,6 +500,17 @@ function notApprovedView() {
 function bindNotApproved() { $("#na-refresh").onclick = () => loadProfile(); }
 
 // ---------- supplier: submit ----------
+// Keep typed values if the phone reloads the page while the camera is open (the photo itself can't be kept).
+const draftKey = () => "fx_invoice_draft_" + (S.session?.user?.id || "");
+function saveDraft() { try { sessionStorage.setItem(draftKey(), JSON.stringify({ fields: S.draft.fields, fileName: S.draft.file?.name || "" })); } catch (e) {} }
+function restoreDraft() {
+  try { const d = JSON.parse(sessionStorage.getItem(draftKey()) || "null"); if (d && !Object.keys(S.draft.fields).length) { S.draft.fields = d.fields || {}; if (d.fileName && !S.draft.file) S.draft.lostFile = d.fileName; } } catch (e) {}
+}
+function clearDraft() {
+  if (S.draft.preview) URL.revokeObjectURL(S.draft.preview);
+  S.draft = { fields: {}, file: null, preview: null, busy: false, lostFile: "" };
+  try { sessionStorage.removeItem(draftKey()); } catch (e) {}
+}
 function submitView() {
   if (S.lastSubmitted) {
     const i = S.lastSubmitted;
@@ -484,7 +522,16 @@ function submitView() {
     </div></section>`;
   }
   const t = todayISO();
-  const f = (id, label, type, extra = "", hint = "") => `<div class="field"><label for="${id}">${label} <span class="req">*</span></label><input class="input${type === "num" ? " num" : ""}" id="${id}" ${type === "num" ? 'type="text" inputmode="decimal" placeholder="0.00"' : `type="${type}"`} ${extra} required>${hint ? `<span class="hint">${hint}</span>` : ""}</div>`;
+  const d = S.draft;
+  const f = (id, label, type, extra = "", hint = "") => `<div class="field"><label for="${id}">${label} <span class="req">*</span></label><input class="input${type === "num" ? " num" : ""}" id="${id}" data-draft ${type === "num" ? 'type="text" inputmode="decimal" placeholder="0.00"' : `type="${type}"`} value="${esc(d.fields[id] || "")}" ${extra} required>${hint ? `<span class="hint">${hint}</span>` : ""}</div>`;
+  const attach = d.busy ? `<div class="attach-item"><div class="spinner"></div><span>Preparing photo…</span></div>`
+    : d.file ? `<div class="attach-item">${d.preview ? `<img src="${d.preview}" alt="Attached invoice photo">` : `<span class="attach-pdf">PDF</span>`}
+        <div style="min-width:0;flex:1"><b style="overflow-wrap:anywhere">${esc(d.file.name)}</b><div class="small muted">${fileSize(d.file.size)} · ready to submit</div></div>
+        <button type="button" class="btn sm" id="f-remove">Remove</button></div>`
+    : `<div class="row">
+        <label class="btn primary" for="f-cam">📷 Take a photo</label>
+        <label class="btn" for="f-file">Choose file</label></div>
+        ${d.lostFile ? `<div class="note warn" style="margin-top:8px">Please attach the invoice again — the page was reloaded while the camera was open.</div>` : ""}`;
   return `<div class="flow" aria-label="How to submit">
       <div class="flow-step"><span class="k">STEP 1</span><b>Fill in the invoice details</b><span>Exactly as printed on your invoice and delivery receipt</span></div>
       <div class="flow-step"><span class="k">STEP 2</span><b>Attach the invoice</b><span>PDF or photo, max 10 MB</span></div>
@@ -507,9 +554,11 @@ function submitView() {
         ${f("f-drdate", "DR date", "date", `max="${t}"`)}
         <div></div>
       </div>
-      <div class="field"><label for="f-file">Invoice file (PDF, JPG or PNG) <span class="req">*</span></label>
-        <input class="input" id="f-file" type="file" accept="application/pdf,image/jpeg,image/png" required>
-        <span class="hint">A clear scan or photo of the invoice. Max 10 MB.</span></div>
+      <div class="field"><label>Invoice file (photo or PDF) <span class="req">*</span></label>
+        <div class="attach">${attach}</div>
+        <input id="f-cam" type="file" accept="image/*" capture="environment" hidden>
+        <input id="f-file" type="file" accept="application/pdf,image/*" hidden>
+        <span class="hint">A clear photo or scan of the whole invoice. Photos are resized automatically; PDFs up to 10 MB.</span></div>
       <p class="err" id="f-err" hidden></p>
       <div class="row"><span style="flex:1"></span><button class="btn" type="reset" id="f-clear">Clear</button><button class="btn primary" type="submit" id="f-go">Submit to Flexo</button></div>
     </form></section>`;
@@ -517,7 +566,7 @@ function submitView() {
 function readInvoiceForm() {
   const v = id => ($("#" + id).value || "").trim();
   const out = { invoice_no: v("f-invno"), invoice_date: v("f-invdate"), po_no: v("f-po"), vatex_amount: num(v("f-vatex")), total_amount: num(v("f-total")), dr_no: v("f-dr"), dr_date: v("f-drdate") };
-  const file = $("#f-file").files[0];
+  const file = S.draft.file;
   const errs = [];
   const missing = [["invoice_no", "invoice number"], ["invoice_date", "invoice date"], ["po_no", "PO number"], ["vatex_amount", "VAT-exclusive amount"], ["total_amount", "total amount"], ["dr_no", "DR number"], ["dr_date", "DR date"]].filter(([k]) => out[k] === "" || out[k] == null).map(([, l]) => l);
   if (!file) missing.push("invoice file");
@@ -527,8 +576,7 @@ function readInvoiceForm() {
   if (out.dr_date && out.dr_date > t) errs.push("DR date can't be in the future.");
   if (out.vatex_amount != null && out.vatex_amount <= 0) errs.push("VAT-exclusive amount must be more than zero.");
   if (out.vatex_amount != null && out.total_amount != null && out.total_amount < out.vatex_amount) errs.push("Total amount can't be less than the VAT-exclusive amount.");
-  if (file && !FILE_TYPES.includes(file.type)) errs.push("The file must be a PDF, JPG or PNG.");
-  if (file && file.size > MAX_FILE) errs.push("The file is larger than 10 MB. Upload a smaller scan.");
+  if (S.draft.busy) errs.push("Wait a moment — the photo is still being prepared.");
   return { out, file, errs };
 }
 async function submitInvoice(e) {
@@ -548,7 +596,7 @@ async function submitInvoice(e) {
     if (up.error) throw up.error;
     const { data, error } = await S.sb.from("invoices").insert(Object.assign({}, out, { file_path: path, file_name: file.name })).select().single();
     if (error) { await S.sb.storage.from(BUCKET).remove([path]); throw error; }
-    S.lastSubmitted = data; S.invoices.unshift(data); render(); sendEmails();
+    S.lastSubmitted = data; S.invoices.unshift(data); clearDraft(); render(); sendEmails();
   } catch (err) {
     errEl.textContent = friendly(err); errEl.hidden = false;
     if (btn.isConnected) { btn.disabled = false; btn.textContent = "Submit to Flexo"; }
@@ -777,13 +825,12 @@ function bindDrawerActions(inv) {
   if ($("#a-paid")) $("#a-paid").onclick = () => confirmBox(
     `<div class="field"><label for="c-date">Payment date</label><input class="input" type="date" id="c-date" value="${inv.release_date && inv.release_date <= todayISO() ? inv.release_date : todayISO()}" max="${todayISO()}"></div>
      <div class="field" style="min-width:170px"><label for="c-ref">Check no. / transfer ref.</label><input class="input mono" id="c-ref"></div>
-     <div class="field" style="flex:1;min-width:220px"><label for="c-proof">Proof of payment (PDF, JPG, PNG)</label><input class="input" type="file" id="c-proof" accept="application/pdf,image/jpeg,image/png"></div>`,
+     <div class="field" style="flex:1;min-width:220px"><label for="c-proof">Proof of payment (PDF, JPG, PNG)</label><input class="input" type="file" id="c-proof" accept="application/pdf,image/*"></div>`,
     async () => {
-      const ref = $("#c-ref").value.trim(), d = $("#c-date").value, f = $("#c-proof").files[0];
+      const ref = $("#c-ref").value.trim(), d = $("#c-date").value, raw = $("#c-proof").files[0];
       if (!d || !ref) return toast("Enter the payment date and check / reference no.");
-      if (!f) return toast("Attach the proof of payment.");
-      if (!FILE_TYPES.includes(f.type)) return toast("Proof must be a PDF, JPG or PNG.");
-      if (f.size > MAX_FILE) return toast("Proof file is larger than 10 MB.");
+      if (!raw) return toast("Attach the proof of payment.");
+      let f; try { f = await prepareUpload(raw); } catch (err) { return toast(err.message); }
       const btn = $("#c-ok"); btn.disabled = true; btn.textContent = "Uploading…";
       const path = `payments/${inv.id}/${Date.now()}-${f.name.replace(/[^A-Za-z0-9._-]/g, "_").slice(-80) || "proof"}`;
       const up = await S.sb.storage.from(BUCKET).upload(path, f, { contentType: f.type, upsert: false });
@@ -851,7 +898,22 @@ function bindView() {
     $("#inv-form").addEventListener("change", () => { $("#f-err").hidden = true; });
     const calc = () => { const a = num($("#f-vatex").value), b = num($("#f-total").value); $("#f-vat").textContent = a != null && b != null ? `${peso(b - a)}  (${a ? ((b - a) / a * 100).toFixed(2) : "0.00"}%)` : "—"; };
     $("#f-vatex").oninput = $("#f-total").oninput = calc;
-    $("#f-clear").onclick = () => setTimeout(calc, 0);
+    $("#f-clear").onclick = ev => { ev.preventDefault(); clearDraft(); render(); };
+    $$("[data-draft]", app).forEach(i => i.addEventListener("input", () => { S.draft.fields[i.id] = i.value; saveDraft(); }));
+    calc();
+    const pick = async input => {
+      const raw = input.files[0]; input.value = ""; if (!raw) return;
+      S.draft.busy = true; S.draft.lostFile = ""; render();
+      try {
+        const file = await prepareUpload(raw);
+        if (S.draft.preview) URL.revokeObjectURL(S.draft.preview);
+        S.draft.file = file; S.draft.preview = file.type.startsWith("image/") ? URL.createObjectURL(file) : null;
+      } catch (err) { S.draft.busy = false; render(); const e = $("#f-err"); if (e) { e.textContent = err.message; e.hidden = false; } return; }
+      S.draft.busy = false; saveDraft(); render();
+    };
+    $("#f-cam").onchange = () => pick($("#f-cam"));
+    $("#f-file").onchange = () => pick($("#f-file"));
+    if ($("#f-remove")) $("#f-remove").onclick = () => { if (S.draft.preview) URL.revokeObjectURL(S.draft.preview); S.draft.file = null; S.draft.preview = null; saveDraft(); render(); };
   }
   if ($("#new-inv")) $("#new-inv").onclick = () => { S.lastSubmitted = null; render(); };
   if ($("#go-mine")) $("#go-mine").onclick = () => { S.lastSubmitted = null; S.tab = "mine"; render(); };

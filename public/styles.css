@@ -258,3 +258,10 @@ fieldset.auth-group legend{padding:0;margin-bottom:10px;font-family:var(--cond);
   .auth-card{padding:24px 18px;border-radius:14px}
   .auth-card h2{font-size:22px}
 }
+
+/* invoice attachment */
+.attach{border:1.5px dashed var(--line-2);border-radius:10px;padding:12px;background:var(--surface-2)}
+.attach .btn{padding:10px 14px}
+.attach-item{display:flex;gap:12px;align-items:center}
+.attach-item img{width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid var(--line);background:#fff;flex:none}
+.attach-pdf{width:64px;height:64px;border-radius:8px;background:var(--bad-soft);color:var(--bad);display:grid;place-items:center;font-weight:700;flex:none}
