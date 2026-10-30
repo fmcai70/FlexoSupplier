@@ -30,7 +30,12 @@ jobs:
           if [ -z "$FTP_SERVER" ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
             echo "::notice::FTP_SERVER secret not set — skipping the Hostinger upload."
+            exit 0
           fi
+          # accept "ftp://157.173.208.251/", spaces etc. — keep only the host name / IP
+          host=$(printf '%s' "$FTP_SERVER" | tr -d '[:space:]' | sed -E 's#^[A-Za-z]+://##; s#[/:].*$##')
+          echo "::add-mask::$host"
+          echo "server=$host" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@v4
         if: steps.check.outputs.skip != 'true'
@@ -59,7 +64,7 @@ jobs:
         if: steps.check.outputs.skip != 'true'
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
-          server: ${{ secrets.FTP_SERVER }}
+          server: ${{ steps.check.outputs.server }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
           protocol: ${{ vars.FTP_PROTOCOL || 'ftps' }}
