@@ -219,6 +219,27 @@ through the **send-auth-email** function, using Supabase's "Send Email" hook.
 With CLI instead of the dashboard: `supabase functions deploy notify` and
 `supabase functions deploy send-auth-email --no-verify-jwt`.
 
+### Hosting on Hostinger (flexo.flexo.com.ph)
+`.github/workflows/deploy-hostinger.yml` uploads `public/` to Hostinger by FTP on every push to `main`.
+It does nothing until the FTP secrets are set.
+1. **Hostinger hPanel → Files → FTP Accounts**: note the **FTP hostname/IP**, **username** and
+   **password** (reset it if you don't know it).
+2. **GitHub → Settings → Secrets and variables → Actions → Secrets**: add `FTP_SERVER`, `FTP_USERNAME`
+   and `FTP_PASSWORD`.
+3. **Actions → Deploy portal to Hostinger → Run workflow**.
+   - If it fails with a TLS/SSL error, add the variable `FTP_PROTOCOL` = `ftp`.
+   - If the files land in the wrong folder, set the variable `FTP_DIR` (default `public_html/`).
+4. **Connect the domain**: in hPanel open the website's "Domain isn't connected" **Check guide**, and add
+   the DNS record it shows. Usually that's an **A record** for `flexo` pointing to the Hostinger server IP,
+   added wherever flexo.com.ph's DNS is managed. Then turn on the free **SSL** (hPanel → Security → SSL).
+5. Point Supabase at the new address: in **Authentication → URL Configuration**, set the Site URL to
+   `https://flexo.flexo.com.ph/` and add `https://flexo.flexo.com.ph/**` to the Redirect URLs. In
+   **Edge Functions → Secrets**, set `PORTAL_URL` = `https://flexo.flexo.com.ph/`.
+6. When the Hostinger site works, you can switch off GitHub Pages (Settings → Pages).
+
+`public/.htaccess` forces HTTPS, sets basic security headers, and stops browsers from caching an old
+version.
+
 ### Local testing
 ```bash
 cp public/config.example.js public/config.js   # fill in URL + anon key

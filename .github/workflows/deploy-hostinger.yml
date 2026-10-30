@@ -1,0 +1,66 @@
+# Uploads public/ to Hostinger by FTP on every push to main (or on demand).
+# Set under Settings → Secrets and variables → Actions:
+#   Secrets:   FTP_SERVER, FTP_USERNAME, FTP_PASSWORD   (hPanel → Files → FTP Accounts)
+#   Variables: SUPABASE_URL, SUPABASE_ANON_KEY            (already set for GitHub Pages)
+#   Optional variables:
+#     FTP_DIR       folder on Hostinger, default "public_html/"
+#     FTP_PROTOCOL  "ftps" (default, encrypted) or "ftp" if Hostinger refuses ftps
+# Until FTP_SERVER is set this workflow does nothing.
+name: Deploy portal to Hostinger
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: hostinger
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Hostinger settings
+        id: check
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
+        run: |
+          if [ -z "$FTP_SERVER" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::FTP_SERVER secret not set — skipping the Hostinger upload."
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.skip != 'true'
+
+      - name: Write config.js
+        if: steps.check.outputs.skip != 'true'
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+          MS_LOGIN: ${{ vars.MS_LOGIN }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "::error::Set the SUPABASE_URL and SUPABASE_ANON_KEY repository variables first."
+            exit 1
+          fi
+          node -e '
+            const cfg = {
+              supabaseUrl: process.env.SUPABASE_URL,
+              supabaseAnonKey: process.env.SUPABASE_ANON_KEY,
+              microsoftLogin: process.env.MS_LOGIN === "true",
+            };
+            require("fs").writeFileSync("public/config.js", "window.FLEXO_CONFIG = " + JSON.stringify(cfg, null, 2) + ";\n");
+          '
+
+      - name: Upload to Hostinger
+        if: steps.check.outputs.skip != 'true'
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ${{ vars.FTP_PROTOCOL || 'ftps' }}
+          local-dir: ./public/
+          server-dir: ${{ vars.FTP_DIR || 'public_html/' }}
